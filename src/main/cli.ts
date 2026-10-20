@@ -19,6 +19,12 @@ import { getVersionManifest, findVersion, installFabricProfile } from './mojang'
 import { installInstance } from './installer'
 import { launchInstance } from './launcher'
 import { listContent, searchProjects, installProject } from './modrinth'
+import {
+  completeMicrosoftLogin,
+  getConfiguredClientId,
+  pollForMicrosoftToken,
+  requestDeviceCode
+} from './auth'
 import { newId, offlineUuid } from './util'
 
 async function main(): Promise<void> {
@@ -27,6 +33,35 @@ async function main(): Promise<void> {
   const loaderType = (process.env.ZP_CLI_LOADER || 'fabric') as 'vanilla' | 'fabric'
   initPaths()
   await store.load()
+
+  if (mode === 'mslogin') {
+    const clientId = process.env.ZP_MS_CLIENT_ID || getConfiguredClientId()
+    if (!clientId) throw new Error('Set ZP_MS_CLIENT_ID or microsoftClientId first')
+    const device = await requestDeviceCode(clientId)
+    console.log(`[mslogin] URL ${device.verification_uri}`)
+    console.log(`[mslogin] CODE ${device.user_code}`)
+    console.log(`[mslogin] EXPIRES ${device.expires_in}s`)
+    const token = await pollForMicrosoftToken(
+      device.device_code,
+      clientId,
+      device.interval || 5,
+      device.expires_in || 900
+    )
+    const record = await completeMicrosoftLogin(token, clientId)
+    const existing = store
+      .getAccounts()
+      .find((account) => account.type === 'microsoft' && account.uuid === record.uuid)
+    if (existing) {
+      await store.updateAccount(existing.id, { ...record, id: existing.id })
+      await store.setActiveAccount(existing.id)
+    } else {
+      await store.addAccount(record)
+    }
+    await store.updateSettings({ microsoftClientId: clientId })
+    console.log(`[mslogin] SUCCESS ${record.username} ${record.uuid}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
 
   if (store.getAccounts().length === 0) {
     const username = 'TestPlayer'

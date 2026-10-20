@@ -189,10 +189,11 @@ export default function MicrosoftLoginModal({
               </button>
               <ol>
                 <li>创建应用，账户类型选择“个人 Microsoft 账户”</li>
-                <li>在 Authentication 中开启“允许公共客户端流”</li>
-                <li>不需要 Client Secret，也不需要重定向 URI</li>
+                <li>在“身份验证”中添加平台“移动和桌面应用程序”</li>
+                <li>勾选 <code>https://login.microsoftonline.com/common/oauth2/nativeclient</code></li>
+                <li>开启“允许公共客户端流”，保存</li>
                 <li>复制“应用程序(客户端) ID”粘贴到上方</li>
-                <li>如果 Minecraft 提示 Invalid app registration，需通过 aka.ms/AppRegInfo 提交启动器应用审批</li>
+                <li>如果提示 Invalid app registration，需通过 aka.ms/AppRegInfo 提交启动器应用审批</li>
               </ol>
             </div>
           </>

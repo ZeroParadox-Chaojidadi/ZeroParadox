@@ -71,11 +71,26 @@ export async function requestDeviceCode(clientId: string, signal?: AbortSignal):
   if (!clientId.trim()) {
     throw new MicrosoftAuthError('请先填写 Microsoft Azure 应用 Client ID')
   }
-  return postForm<DeviceCodeResponse>(
-    DEVICE_CODE_URL,
-    { client_id: clientId.trim(), scope: SCOPE },
-    signal
-  )
+  try {
+    return await postForm<DeviceCodeResponse>(
+      DEVICE_CODE_URL,
+      { client_id: clientId.trim(), scope: SCOPE },
+      signal
+    )
+  } catch (error) {
+    if (
+      error instanceof MicrosoftAuthError &&
+      (error.oauthError === 'invalid_client' || error.message.includes('AADSTS70002'))
+    ) {
+      throw new MicrosoftAuthError(
+        'Azure 应用还不是公共客户端。请在“身份验证”中添加“移动和桌面应用程序”平台，并开启“允许公共客户端流”后保存。',
+        error.oauthError,
+        error.status,
+        error.details
+      )
+    }
+    throw error
+  }
 }
 
 export async function pollForMicrosoftToken(
