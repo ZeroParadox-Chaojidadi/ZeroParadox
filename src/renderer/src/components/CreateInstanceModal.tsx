@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, Loader2, Search } from 'lucide-react'
-import type { VersionSummary } from '../../../shared/types'
-import { cn } from '../lib/utils'
+import type { ForgeLoader, VersionSummary } from '../../../shared/types'
+import { api, cn, errorMessage } from '../lib/utils'
 import Modal from './Modal'
 
 interface CreateInstanceModalProps {
@@ -12,7 +12,8 @@ interface CreateInstanceModalProps {
   onCreate: (input: {
     name: string
     gameVersion: string
-    loaderType: 'vanilla' | 'fabric'
+    loaderType: 'vanilla' | 'fabric' | 'forge'
+    forgeVersion?: string
   }) => Promise<void>
 }
 
@@ -25,7 +26,11 @@ export default function CreateInstanceModal({
 }: CreateInstanceModalProps): React.JSX.Element {
   const [name, setName] = useState(`Minecraft ${latestRelease}`)
   const [gameVersion, setGameVersion] = useState(latestRelease)
-  const [loaderType, setLoaderType] = useState<'vanilla' | 'fabric'>('fabric')
+  const [loaderType, setLoaderType] = useState<'vanilla' | 'fabric' | 'forge'>('fabric')
+  const [forgeVersions, setForgeVersions] = useState<ForgeLoader[]>([])
+  const [forgeVersion, setForgeVersion] = useState('')
+  const [forgeLoading, setForgeLoading] = useState(false)
+  const [forgeError, setForgeError] = useState('')
   const [search, setSearch] = useState('')
   const [showSnapshots, setShowSnapshots] = useState(showSnapshotsDefault)
   const [versionOpen, setVersionOpen] = useState(false)
@@ -44,6 +49,46 @@ export default function CreateInstanceModal({
     setName((current) => (current.startsWith('Minecraft ') ? `Minecraft ${gameVersion}` : current))
   }, [gameVersion])
 
+  useEffect(() => {
+    if (loaderType !== 'forge') {
+      setForgeVersions([])
+      setForgeVersion('')
+      setForgeError('')
+      setForgeLoading(false)
+      return
+    }
+    let cancelled = false
+    setForgeLoading(true)
+    setForgeError('')
+    void api.forge
+      .versions(gameVersion)
+      .then((list) => {
+        if (cancelled) return
+        setForgeVersions(list)
+        setForgeVersion((current) => {
+          if (list.some((item) => item.version === current)) return current
+          return (
+            list.find((item) => item.recommended)?.version ||
+            list.find((item) => item.latest)?.version ||
+            list[0]?.version ||
+            ''
+          )
+        })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setForgeVersions([])
+        setForgeVersion('')
+        setForgeError(errorMessage(err))
+      })
+      .finally(() => {
+        if (!cancelled) setForgeLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [gameVersion, loaderType])
+
   const create = async (): Promise<void> => {
     if (creating) return
     setError('')
@@ -51,11 +96,20 @@ export default function CreateInstanceModal({
       setError('请输入实例名称')
       return
     }
+    if (loaderType === 'forge' && !forgeVersion) {
+      setError(forgeLoading ? '正在获取 Forge 版本…' : '请选择 Forge 版本')
+      return
+    }
     setCreating(true)
     try {
-      await onCreate({ name: name.trim(), gameVersion, loaderType })
+      await onCreate({
+        name: name.trim(),
+        gameVersion,
+        loaderType,
+        forgeVersion: loaderType === 'forge' ? forgeVersion : undefined
+      })
     } catch (err) {
-      setError(err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': Error: /, '') : String(err))
+      setError(errorMessage(err))
       setCreating(false)
     }
   }
@@ -71,13 +125,17 @@ export default function CreateInstanceModal({
       footer={
         <>
           <span className="modal-footnote">
-            {loaderType === 'fabric' ? '将自动安装最新稳定版 Fabric' : '原版游戏，可稍后加装 Fabric'}
+            {loaderType === 'fabric'
+              ? '将自动安装最新稳定版 Fabric'
+              : loaderType === 'forge'
+                ? '首次启动会下载并安装 Forge，可能需要几分钟'
+                : '原版游戏，可稍后加装 Fabric 或 Forge'}
           </span>
           <div className="modal-actions">
             <button className="btn btn-ghost" onClick={onClose} disabled={creating}>
               取消
             </button>
-            <button className="btn btn-primary" onClick={() => void create()} disabled={creating}>
+            <button className="btn btn-primary" onClick={() => void create()} disabled={creating || (loaderType === 'forge' && (forgeLoading || !forgeVersion))}>
               {creating ? <Loader2 size={15} className="spin" /> : null}
               {creating ? '创建中…' : '创建'}
             </button>
@@ -178,8 +236,50 @@ export default function CreateInstanceModal({
               </span>
               {loaderType === 'fabric' && <Check size={15} />}
             </button>
+            <button
+              type="button"
+              className={cn('loader-option', loaderType === 'forge' && 'selected')}
+              onClick={() => setLoaderType('forge')}
+            >
+              <span className="loader-icon forge">F</span>
+              <span>
+                <strong>Forge</strong>
+                <small>模组加载器</small>
+              </span>
+              {loaderType === 'forge' && <Check size={15} />}
+            </button>
           </div>
         </div>
+
+        {loaderType === 'forge' && (
+          <div className="field">
+            <span>Forge 版本</span>
+            {forgeLoading ? (
+              <div className="forge-loading">
+                <Loader2 size={14} className="spin" /> 正在获取 Forge 版本…
+              </div>
+            ) : forgeError ? (
+              <div className="form-error">{forgeError}</div>
+            ) : (
+              <div className="select-wrap">
+                <select
+                  value={forgeVersion}
+                  onChange={(event) => setForgeVersion(event.target.value)}
+                  disabled={creating}
+                >
+                  {forgeVersions.map((item) => (
+                    <option key={item.version} value={item.version}>
+                      {item.version}
+                      {item.recommended ? '（推荐）' : item.latest ? '（最新）' : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} />
+              </div>
+            )}
+            <small className="field-note">创建后首次启动时自动安装，不再需要手动运行安装器。</small>
+          </div>
+        )}
 
         {error && <div className="form-error">{error}</div>}
       </div>

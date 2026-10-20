@@ -5,6 +5,7 @@ import type {
   Bootstrap,
   ContentEntry,
   ContentKind,
+  ForgeLoader,
   GameExitEvent,
   InstallSummary,
   Instance,
@@ -47,6 +48,10 @@ const api: LauncherApi = {
   },
   versions: {
     list: (force = false) => ipcRenderer.invoke('versions:list', force) as Promise<VersionManifestResult>
+  },
+  forge: {
+    versions: (gameVersion: string) =>
+      ipcRenderer.invoke('forge:versions', gameVersion) as Promise<ForgeLoader[]>
   },
   instances: {
     create: (input) => ipcRenderer.invoke('instances:create', input) as Promise<Instance>,

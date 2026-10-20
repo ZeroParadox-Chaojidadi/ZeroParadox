@@ -13,7 +13,7 @@ import {
   ChevronDown
 } from 'lucide-react'
 import type { ContentKind, Instance, ModrinthSearchHit } from '../../../shared/types'
-import { api, cn, errorMessage, formatNumber } from '../lib/utils'
+import { api, cn, errorMessage, formatNumber, loaderLabel } from '../lib/utils'
 import EmptyState from '../components/EmptyState'
 import ProjectModal from '../components/ProjectModal'
 
@@ -160,7 +160,7 @@ export default function BrowseView({
               <select value={instance.id} onChange={(event) => setInstanceId(event.target.value)}>
                 {instances.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name} · {item.gameVersion} · {item.loader.type === 'fabric' ? 'Fabric' : '原版'}
+                    {item.name} · {item.gameVersion} · {loaderLabel(item.loader)}
                   </option>
                 ))}
               </select>
@@ -171,7 +171,7 @@ export default function BrowseView({
         <div className="browse-target-meta">
           <span>Minecraft {instance.gameVersion}</span>
           <span className={cn('loader-tag', instance.loader.type)}>
-            {instance.loader.type === 'fabric' ? 'Fabric' : '原版'}
+            {loaderLabel(instance.loader)}
           </span>
         </div>
       </div>

@@ -19,6 +19,7 @@ import type {
 import { initPaths, getPaths, gameDir, instanceDir } from './paths'
 import { store } from './store'
 import { getVersionManifest, findVersion, installFabricProfile } from './mojang'
+import { getForgeLoaders } from './forge'
 import { installInstance } from './installer'
 import {
   launchInstance,
@@ -368,6 +369,10 @@ function registerIpc(): void {
     return getVersionManifest(Boolean(force))
   })
 
+  ipcMain.handle('forge:versions', async (_event, gameVersion: string) => {
+    return getForgeLoaders(String(gameVersion || '').trim())
+  })
+
   ipcMain.handle(
     'instances:create',
     async (
@@ -375,7 +380,8 @@ function registerIpc(): void {
       input: {
         name: string
         gameVersion: string
-        loaderType: 'vanilla' | 'fabric'
+        loaderType: 'vanilla' | 'fabric' | 'forge'
+        forgeVersion?: string
         icon?: string
         color?: string
         memoryMb?: number | null
@@ -393,6 +399,15 @@ function registerIpc(): void {
         const profile = await installFabricProfile(input.gameVersion)
         versionId = profile.profileId
         loader = { type: 'fabric', version: profile.loaderVersion }
+      } else if (input.loaderType === 'forge') {
+        const forgeVersion = String(input.forgeVersion || '').trim()
+        if (!forgeVersion) throw new Error('请选择 Forge 版本')
+        const available = await getForgeLoaders(input.gameVersion)
+        if (!available.some((item) => item.version === forgeVersion)) {
+          throw new Error(`Forge ${forgeVersion} 不支持 Minecraft ${input.gameVersion}`)
+        }
+        versionId = `${input.gameVersion}-forge-${forgeVersion}`
+        loader = { type: 'forge', version: forgeVersion }
       }
       return store.createInstance({
         name,

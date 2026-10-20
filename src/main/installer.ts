@@ -6,6 +6,7 @@ import { getPaths, gameDir, instanceNativesDir } from './paths'
 import { concurrentMap, downloadFile, mirrorUrl, throwIfAborted } from './http'
 import type { ResolvedVersion } from './mojang'
 import { resolveVersion } from './mojang'
+import { ensureForgeInstalled } from './forge'
 import { collectClasspath, nativeArtifact, rulesAllow } from './version'
 import { ensureDir, pathExists, writeJsonAtomic } from './util'
 import { store } from './store'
@@ -17,7 +18,7 @@ interface AssetIndex {
 }
 
 export interface InstallProgressUpdate {
-  kind: 'preparing' | 'version' | 'libraries' | 'natives' | 'assets' | 'done'
+  kind: 'preparing' | 'version' | 'forge' | 'libraries' | 'natives' | 'assets' | 'done'
   phase: string
   message: string
   current: number
@@ -55,6 +56,23 @@ export async function installInstance(
   const paths = getPaths()
   const report = (update: InstallProgressUpdate): void => onProgress(update)
   throwIfAborted(signal)
+
+  instance = await ensureForgeInstalled(instance, {
+    source,
+    signal,
+    onProgress: (update) => {
+      report({
+        kind: 'forge',
+        phase: update.phase,
+        message: update.message,
+        current: 0,
+        total: 1,
+        bytes: update.bytes,
+        bytesTotal: update.bytesTotal,
+        percent: update.percent
+      })
+    }
+  })
 
   report({
     kind: 'preparing',

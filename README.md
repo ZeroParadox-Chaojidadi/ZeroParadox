@@ -12,7 +12,7 @@
 ## 功能
 
 - **实例隔离**：每个实例使用独立的 `minecraft` 目录，模组、存档和设置互不影响。
-- **原版 / Fabric**：创建 Fabric 实例时自动获取最新稳定版 Loader。
+- **原版 / Fabric / Forge**：支持原版、Fabric 和 Forge；Forge 可在创建实例时选择推荐版或最新版。
 - **自动安装**：从 Mojang 或 BMCLAPI 下载客户端、依赖库、资源和日志配置，
   使用 SHA-1 校验文件。
 - **Java 检测**：优先使用本机合适的 Java；没有时下载 Mojang Java Runtime。
@@ -23,10 +23,11 @@
 
 ## 当前范围
 
-- 加载器：**Vanilla**、**Fabric**。
+- 加载器：**Vanilla**、**Fabric**、**Forge**。
 - 账户：离线账户、Microsoft 正版账户。Microsoft 登录需要你自己的 Azure 应用
   Client ID，且 Minecraft API 可能要求 Mojang 审批该应用。
-- 不支持 Forge、NeoForge、Quilt 自动安装，也不支持整合包导入。
+- Forge 首次启动会自动下载安装器并完成安装；Forge 实例使用对应游戏版本要求的 Java。
+- 不支持 NeoForge、Quilt 自动安装，也不支持整合包导入。
 - 目前提供 Windows x64 构建。其他平台未测试。
 
 ## 微软正版登录

@@ -173,7 +173,8 @@ export async function ensureJavaRuntime(
   component: string,
   settings: Settings,
   signal: AbortSignal | undefined,
-  onProgress: (progress: JavaProgress) => void
+  onProgress: (progress: JavaProgress) => void,
+  options: { exact?: boolean } = {}
 ): Promise<JavaCandidate> {
   const candidates = await findJavaCandidates(settings)
   const explicit = settings.javaPath ? candidates.find((item) => path.resolve(item.path) === path.resolve(settings.javaPath)) : null
@@ -181,7 +182,15 @@ export async function ensureJavaRuntime(
     if (explicit.major < requiredMajor) {
       throw new Error(`所选 Java 版本过低：需要 Java ${requiredMajor} 或更高，当前为 Java ${explicit.major}`)
     }
+    if (options.exact && explicit.major !== requiredMajor) {
+      throw new Error(`这个加载器需要 Java ${requiredMajor}，当前选择的是 Java ${explicit.major}`)
+    }
     return explicit
+  }
+  if (options.exact) {
+    const exact = candidates.find((item) => item.major === requiredMajor)
+    if (exact) return exact
+    return downloadJavaRuntime(requiredMajor, component, signal, onProgress)
   }
   const compatible = candidates
     .filter((item) => item.major >= requiredMajor && item.major <= requiredMajor + 8)

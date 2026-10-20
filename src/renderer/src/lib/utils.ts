@@ -46,6 +46,7 @@ export function formatPlaytime(ms: number): string {
 
 export function loaderLabel(loader: { type: string; version?: string }): string {
   if (loader.type === 'fabric') return `Fabric${loader.version ? ` ${loader.version.split('.').slice(0, 2).join('.')}` : ''}`
+  if (loader.type === 'forge') return `Forge${loader.version ? ` ${loader.version}` : ''}`
   return '原版'
 }
 

@@ -1,4 +1,4 @@
-export type LoaderType = 'vanilla' | 'fabric';
+export type LoaderType = 'vanilla' | 'fabric' | 'forge';
 
 export interface LoaderInfo {
   type: LoaderType;
@@ -116,10 +116,17 @@ export interface FabricLoader {
   stable: boolean;
 }
 
+export interface ForgeLoader {
+  version: string;
+  recommended: boolean;
+  latest: boolean;
+}
+
 export type ProgressKind =
   | 'preparing'
   | 'version'
   | 'fabric'
+  | 'forge'
   | 'libraries'
   | 'assets'
   | 'java'
@@ -293,11 +300,15 @@ export interface LauncherApi {
   versions: {
     list: (force?: boolean) => Promise<VersionManifestResult>;
   };
+  forge: {
+    versions: (gameVersion: string) => Promise<ForgeLoader[]>;
+  };
   instances: {
     create: (input: {
       name: string;
       gameVersion: string;
-      loaderType: 'vanilla' | 'fabric';
+      loaderType: 'vanilla' | 'fabric' | 'forge';
+      forgeVersion?: string;
       icon?: string;
       color?: string;
       memoryMb?: number | null;

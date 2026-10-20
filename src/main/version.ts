@@ -131,7 +131,6 @@ export function collectClasspath(root: string, resolved: ResolvedVersion): Class
     if (!rulesAllow(library.rules, {})) continue
     const artifact = libraryArtifact(library)
     if (!artifact) continue
-    if (!artifact.url) continue
     if (seen.has(artifact.path)) continue
     seen.add(artifact.path)
     out.push({
@@ -214,8 +213,15 @@ export function buildLaunchArguments(options: {
     resolution_height: String(instance.resolution.height)
   }
   const jvmArgs: string[] = []
+  const forgeBootstrap = Boolean(resolved.versionJson.mainClass?.includes('bootstraplauncher'))
   for (const raw of flattenArguments(resolved.versionJson.arguments?.jvm, features)) {
-    jvmArgs.push(...splitSingleArgument(fillTemplate(raw, values)))
+    let value = fillTemplate(raw, values)
+    if (forgeBootstrap && value.startsWith('-DignoreList=')) {
+      const baseJar = `${resolved.baseVersionId}.jar`
+      const listed = value.slice('-DignoreList='.length).split(',')
+      if (!listed.includes(baseJar)) value = `${value},${baseJar}`
+    }
+    jvmArgs.push(...splitSingleArgument(value))
   }
   if (resolved.versionJson.minecraftArguments) {
     // Very old versions have no modern jvm argument list. Add the essentials.

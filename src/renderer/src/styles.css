@@ -1464,6 +1464,12 @@ img {
   background: rgba(255, 120, 140, 0.07) !important;
 }
 
+.loader-tag.forge {
+  color: #ffc078 !important;
+  border-color: rgba(255, 170, 80, 0.2) !important;
+  background: rgba(255, 170, 80, 0.07) !important;
+}
+
 .loader-tag.vanilla {
   color: var(--muted) !important;
 }
@@ -3845,6 +3851,29 @@ img {
   color: #ffb3c1;
 }
 
+.loader-icon.forge {
+  background: rgba(255, 170, 80, 0.11);
+  color: #ffc078;
+}
+
+.forge-loading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.field-note {
+  color: var(--muted-2);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
 .loader-option > span:nth-child(2) {
   display: flex;
   flex-direction: column;
@@ -5904,6 +5933,11 @@ body,
 .row-version em.fabric {
   color: #ffb3c1;
   border-color: rgba(255, 120, 140, 0.18);
+}
+
+.row-version em.forge {
+  color: #ffc078;
+  border-color: rgba(255, 170, 80, 0.2);
 }
 
 .row-played {

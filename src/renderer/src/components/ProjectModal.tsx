@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Download, ExternalLink, Heart, Loader2, PackageOpen } from 'lucide-react'
 import type { Instance, ModrinthProject, ModrinthVersion } from '../../../shared/types'
 import type { ContentKind } from '../../../shared/types'
-import { api, errorMessage, formatDate, formatNumber } from '../lib/utils'
+import { api, errorMessage, formatDate, formatNumber, loaderLabel } from '../lib/utils'
 import Modal from './Modal'
 
 interface ProjectModalProps {
@@ -156,7 +156,7 @@ export default function ProjectModal({
               <h4>选择版本</h4>
               {versions.length === 0 ? (
                 <div className="list-empty">
-                  没有适配 {instance.gameVersion} / {instance.loader.type === 'fabric' ? 'Fabric' : '原版'} 的版本。
+                  没有适配 {instance.gameVersion} / {loaderLabel(instance.loader)} 的版本。
                 </div>
               ) : (
                 <div className="version-options">

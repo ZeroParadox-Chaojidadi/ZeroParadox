@@ -12,6 +12,7 @@ import { installInstance, InstallProgressUpdate } from './installer'
 import { ensureJavaRuntime } from './java'
 import { store } from './store'
 import { ensureMicrosoftSession } from './auth'
+import { ensureForgeInstalled } from './forge'
 import { CancelledError } from './http'
 
 interface RunningGame {
@@ -67,7 +68,7 @@ export async function launchInstance(
   } = {}
 ): Promise<LaunchResult> {
   if (running.has(instanceId)) throw new Error('这个实例已经在运行了')
-  const instance = store.requireInstance(instanceId)
+  let instance = store.requireInstance(instanceId)
   const settings = store.getSettings()
   let account = store.getActiveAccount()
   if (!account) throw new Error('请先添加并选择一个游戏账户')
@@ -88,6 +89,27 @@ export async function launchInstance(
   }
 
   emit({ kind: 'preparing', phase: '准备启动', message: '正在检查游戏文件…', percent: 2 })
+  if (instance.loader.type === 'forge') {
+    emit({ kind: 'preparing', phase: 'Forge', message: '正在检查 Forge 安装…', percent: 2 })
+    try {
+      instance = await ensureForgeInstalled(instance, {
+        source: settings.downloadSource,
+        signal: options.signal,
+        settings,
+        onProgress: (update) => {
+          emit({
+            kind: 'install',
+            phase: update.phase,
+            message: update.message,
+            percent: Math.min(88, update.percent)
+          })
+        }
+      })
+    } catch (error) {
+      if (error instanceof CancelledError) throw error
+      throw new Error(`安装 Forge 失败：${messageOf(error)}`)
+    }
+  }
   let resolved: ResolvedVersion
   try {
     resolved = await resolveVersion(instance.versionId, settings.downloadSource, options.signal)
@@ -133,7 +155,8 @@ export async function launchInstance(
         message: `${progress.label} · ${formatMb(progress.bytesDone)} / ${formatMb(progress.bytesTotal)}`,
         percent: 88 + 7 * (progress.bytesTotal > 0 ? progress.bytesDone / progress.bytesTotal : 0)
       })
-    }
+    },
+    { exact: instance.loader.type === 'forge' }
   )
   log(`使用 ${java.label}：${java.path}`)
 

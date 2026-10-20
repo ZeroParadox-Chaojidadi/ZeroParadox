@@ -8,7 +8,8 @@
  * Environment:
  *   ZP_DATA_DIR       isolated data root (required)
  *   ZP_CLI_VERSION    Minecraft version (default 26.3)
- *   ZP_CLI_LOADER     vanilla | fabric (default fabric)
+ *   ZP_CLI_LOADER     vanilla | fabric | forge (default fabric)
+ *   ZP_CLI_FORGE_VERSION  required when loader=forge
  *   ZP_CLI_INSTANCE   reuse an existing instance id
  *   ZP_CLI_WAIT       seconds to wait for a launch (default 20)
  */
@@ -25,14 +26,28 @@ import {
   pollForMicrosoftToken,
   requestDeviceCode
 } from './auth'
+import { installForge } from './forge'
 import { newId, offlineUuid } from './util'
 
 async function main(): Promise<void> {
   const mode = process.argv[2] || 'install'
   const version = process.env.ZP_CLI_VERSION || '26.3'
-  const loaderType = (process.env.ZP_CLI_LOADER || 'fabric') as 'vanilla' | 'fabric'
+  const loaderType = (process.env.ZP_CLI_LOADER || 'fabric') as 'vanilla' | 'fabric' | 'forge'
   initPaths()
   await store.load()
+
+  if (mode === 'forge-install') {
+    const gameVersion = process.env.ZP_CLI_VERSION || '1.20.1'
+    const forgeVersion = process.env.ZP_CLI_FORGE_VERSION?.trim()
+    if (!forgeVersion) throw new Error('Set ZP_CLI_FORGE_VERSION')
+    const result = await installForge(gameVersion, forgeVersion, {
+      source: (process.env.ZP_CLI_SOURCE as 'official' | 'bmclapi') || 'official',
+      onProgress: (update) => console.log(`[forge ${Math.round(update.percent)}%] ${update.message}`)
+    })
+    console.log(`[forge] version=${result.versionId} java=${result.javaPath}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
 
   if (mode === 'mslogin') {
     const clientId = process.env.ZP_MS_CLIENT_ID || getConfiguredClientId()
@@ -83,11 +98,16 @@ async function main(): Promise<void> {
     const manifest = await getVersionManifest()
     findVersion(manifest, version)
     let versionId = version
-    let loader: { type: 'vanilla' | 'fabric'; version?: string } = { type: 'vanilla' }
+    let loader: { type: 'vanilla' | 'fabric' | 'forge'; version?: string } = { type: 'vanilla' }
     if (loaderType === 'fabric') {
       const profile = await installFabricProfile(version)
       versionId = profile.profileId
       loader = { type: 'fabric', version: profile.loaderVersion }
+    } else if (loaderType === 'forge') {
+      const forgeVersion = process.env.ZP_CLI_FORGE_VERSION?.trim()
+      if (!forgeVersion) throw new Error('Set ZP_CLI_FORGE_VERSION for a Forge test')
+      versionId = `${version}-forge-${forgeVersion}`
+      loader = { type: 'forge', version: forgeVersion }
     }
     instance = await store.createInstance({
       name: `Integration ${version}`,

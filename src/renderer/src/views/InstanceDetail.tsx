@@ -320,7 +320,7 @@ function ContentTab({
       {kind === 'mod' && instance.loader.type === 'vanilla' && (
         <div className="inline-banner warning">
           <AlertTriangle size={16} />
-          <span>这个实例是原版，安装的模组不会生效。建议创建一个 Fabric 实例。</span>
+          <span>这个实例是原版，安装的模组不会生效。建议创建一个 Fabric 或 Forge 实例。</span>
         </div>
       )}
 
