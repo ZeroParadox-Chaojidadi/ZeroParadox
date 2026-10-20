@@ -10,5 +10,7 @@ dist/
 *.log
 java_all.json
 .DS_Store
+github-upload/
+ZeroParadox-GitHub.zip
 
 *.tsbuildinfo
