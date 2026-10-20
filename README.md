@@ -62,10 +62,24 @@ release/ZeroParadox-1.0.0-x64.exe        NSIS 安装程序
 release/ZeroParadox-1.0.0-portable.exe   便携版
 ```
 
-安装包未做代码签名，Windows SmartScreen 可能提示“未知发布者”。
+安装包未做代码签名，Windows SmartScreen 可能提示“未知发布者”或
+“打开文件 - 安全警告”。选择“更多信息 → 仍要运行”即可。
 
 便携版将数据保存在程序旁的 `ZeroParadoxData/`；安装版使用
 `%APPDATA%\ZeroParadox\data`。
+
+## 启动问题
+
+安装后请使用桌面或开始菜单里的 **零式悖论** 快捷方式。
+
+- `ZeroParadox.exe` 是一个很小的启动包装器：会清理
+  `ELECTRON_RUN_AS_NODE`，并兼容无法初始化 Chromium 沙箱的 Windows 会话。
+- `ZeroParadoxApp.exe` 是实际的 Electron 主程序，**不要直接双击它**。
+- 如果 Windows 第一次弹出“无法验证发布者 / 打开文件 - 安全警告”，
+  点击“运行”或“仍要运行”。这是因为安装包没有代码签名证书。
+
+兼容启动会关闭 Chromium 沙箱，但渲染层仍启用 `contextIsolation`、禁用
+Node 集成，并且只加载本地界面资源。
 
 ## 数据目录
 

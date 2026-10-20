@@ -57,6 +57,7 @@
     ],
     "asar": true,
     "electronDist": "node_modules/electron/dist",
+    "afterPack": "build/afterPack.js",
     "asarUnpack": [],
     "win": {
       "icon": "build/icon.ico",
