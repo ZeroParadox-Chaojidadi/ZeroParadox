@@ -49,11 +49,23 @@ export default function Sidebar({
       <div className="sidebar-bottom">
         <button className="account-card" onClick={onAccountClick}>
           <span className="account-avatar">
-            {activeAccount ? activeAccount.username.slice(0, 1).toUpperCase() : <UserRound size={17} />}
+            {activeAccount?.avatarUrl ? (
+              <img src={activeAccount.avatarUrl} alt="" />
+            ) : activeAccount ? (
+              activeAccount.username.slice(0, 1).toUpperCase()
+            ) : (
+              <UserRound size={17} />
+            )}
           </span>
           <span className="account-copy">
             <strong>{activeAccount ? activeAccount.username : '添加账户'}</strong>
-            <small>{activeAccount ? '离线账户' : '未登录'}</small>
+            <small>
+              {activeAccount
+                ? activeAccount.type === 'microsoft'
+                  ? 'Microsoft 账户'
+                  : '离线账户'
+                : '未登录'}
+            </small>
           </span>
           <span className={cn('status-dot', activeAccount && 'online')} />
         </button>

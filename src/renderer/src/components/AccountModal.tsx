@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Loader2, Plus, ShieldCheck, Trash2, UserRound } from 'lucide-react'
+import { Check, ChevronRight, Loader2, LogIn, Plus, ShieldCheck, Trash2, UserRound } from 'lucide-react'
 import type { Account } from '../../../shared/types'
 import { cn } from '../lib/utils'
 import Modal from './Modal'
@@ -11,6 +11,7 @@ interface AccountModalProps {
   onAddOffline: (username: string) => Promise<void>
   onRemove: (id: string) => Promise<void>
   onSetActive: (id: string) => Promise<void>
+  onMicrosoftLogin: () => void
 }
 
 export default function AccountModal({
@@ -19,12 +20,13 @@ export default function AccountModal({
   onClose,
   onAddOffline,
   onRemove,
-  onSetActive
+  onSetActive,
+  onMicrosoftLogin
 }: AccountModalProps): React.JSX.Element {
   const [username, setUsername] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [showForm, setShowForm] = useState(accounts.length === 0)
+  const [showForm, setShowForm] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
 
   const add = async (): Promise<void> => {
@@ -50,7 +52,7 @@ export default function AccountModal({
       footer={
         <div className="modal-actions spread">
           <span className="modal-footnote">
-            <ShieldCheck size={14} /> 离线账户仅用于本地游戏，不验证正版身份
+            <ShieldCheck size={14} /> Microsoft 登录由微软完成，启动器不会接触密码
           </span>
           <button className="btn btn-ghost" onClick={onClose}>
             完成
@@ -58,6 +60,16 @@ export default function AccountModal({
         </div>
       }
     >
+      <button className="ms-login-entry" onClick={onMicrosoftLogin}>
+        <span className="ms-login-logo">M</span>
+        <span>
+          <strong>Microsoft 正版登录</strong>
+          <small>登录后可以进入开启正版验证的服务器</small>
+        </span>
+        <LogIn size={17} />
+        <ChevronRight size={15} />
+      </button>
+
       <div className="account-list">
         {accounts.map((account) => (
           <div key={account.id} className={cn('account-row', account.id === activeAccountId && 'active')}>
@@ -93,7 +105,7 @@ export default function AccountModal({
           </div>
         ))}
         {accounts.length === 0 && !showForm && (
-          <div className="list-empty">还没有账户，添加一个离线账户即可开始游戏。</div>
+          <div className="list-empty">还没有账户，使用 Microsoft 登录或添加离线账户。</div>
         )}
       </div>
 

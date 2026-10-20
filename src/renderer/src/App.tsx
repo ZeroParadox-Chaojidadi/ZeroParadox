@@ -17,6 +17,7 @@ import Sidebar from './components/Sidebar'
 import ToastViewport from './components/ToastViewport'
 import CreateInstanceModal from './components/CreateInstanceModal'
 import AccountModal from './components/AccountModal'
+import MicrosoftLoginModal from './components/MicrosoftLoginModal'
 import TaskModal from './components/TaskModal'
 import Modal from './components/Modal'
 import LibraryView from './views/LibraryView'
@@ -44,6 +45,7 @@ export default function App(): React.JSX.Element {
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [createOpen, setCreateOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [msLoginOpen, setMsLoginOpen] = useState(false)
   const [runningIds, setRunningIds] = useState<string[]>([])
   const [launchingId, setLaunchingId] = useState<string | null>(null)
   const [task, setTask] = useState<TaskState | null>(null)
@@ -460,6 +462,7 @@ export default function App(): React.JSX.Element {
               dataDir={data.dataDir}
               totalMemoryMb={data.totalMemoryMb}
               activeAccountName={activeAccount?.username || null}
+              activeAccountType={activeAccount?.type || null}
               onUpdate={updateSettings}
               onAccount={() => setAccountOpen(true)}
               onToast={pushToast}
@@ -489,7 +492,7 @@ export default function App(): React.JSX.Element {
         />
       )}
 
-      {accountOpen && (
+      {accountOpen && !msLoginOpen && (
         <AccountModal
           accounts={data.accounts}
           activeAccountId={data.activeAccountId}
@@ -497,6 +500,21 @@ export default function App(): React.JSX.Element {
           onAddOffline={addOffline}
           onRemove={removeAccount}
           onSetActive={setActive}
+          onMicrosoftLogin={() => setMsLoginOpen(true)}
+        />
+      )}
+
+      {msLoginOpen && (
+        <MicrosoftLoginModal
+          clientId={data.settings.microsoftClientId}
+          onClose={() => setMsLoginOpen(false)}
+          onSaveClientId={async (clientId) => {
+            await updateSettings({ microsoftClientId: clientId })
+          }}
+          onSuccess={async () => {
+            await refresh()
+          }}
+          onToast={pushToast}
         />
       )}
 

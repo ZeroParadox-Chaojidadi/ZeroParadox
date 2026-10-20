@@ -14,6 +14,7 @@ import type {
   ModrinthProject,
   ModrinthSearchResult,
   ModrinthVersion,
+  MicrosoftDeviceCodeInfo,
   NewsItem,
   ProgressEvent,
   Settings,
@@ -68,7 +69,10 @@ const api: LauncherApi = {
   accounts: {
     addOffline: (username: string) => ipcRenderer.invoke('accounts:addOffline', username) as Promise<Account>,
     remove: (id: string) => ipcRenderer.invoke('accounts:remove', id) as Promise<boolean>,
-    setActive: (id: string) => ipcRenderer.invoke('accounts:setActive', id) as Promise<boolean>
+    setActive: (id: string) => ipcRenderer.invoke('accounts:setActive', id) as Promise<boolean>,
+    microsoftStart: () => ipcRenderer.invoke('accounts:microsoftStart') as Promise<MicrosoftDeviceCodeInfo>,
+    microsoftWait: (flowId: string) => ipcRenderer.invoke('accounts:microsoftWait', flowId) as Promise<Account>,
+    microsoftCancel: (flowId: string) => ipcRenderer.invoke('accounts:microsoftCancel', flowId) as Promise<boolean>
   },
   news: {
     list: () => ipcRenderer.invoke('news:list') as Promise<NewsItem[]>

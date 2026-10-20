@@ -41,11 +41,21 @@ import {
 } from './modrinth'
 import { newId, offlineUuid, pathExists } from './util'
 import { CancelledError } from './http'
+import {
+  completeMicrosoftLogin,
+  getConfiguredClientId,
+  pollForMicrosoftToken,
+  requestDeviceCode
+} from './auth'
 
 let mainWindow: BrowserWindow | null = null
 const jobs = new Map<string, { abort: AbortController; startedAt: number; instanceId: string }>()
 const gameStartTimes = new Map<string, number>()
 const progressTimes = new Map<string, number>()
+const microsoftFlows = new Map<
+  string,
+  { abort: AbortController; deviceCode: string; clientId: string; interval: number; expiresIn: number }
+>()
 
 function send(channel: string, payload: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -348,6 +358,9 @@ function registerIpc(): void {
     if (allowed.checkUpdates === undefined && patch.checkUpdates !== undefined) {
       allowed.checkUpdates = Boolean(patch.checkUpdates)
     }
+    if (allowed.microsoftClientId !== undefined) {
+      allowed.microsoftClientId = String(allowed.microsoftClientId).trim().slice(0, 100)
+    }
     return store.updateSettings(allowed)
   })
 
@@ -476,6 +489,75 @@ function registerIpc(): void {
   })
   ipcMain.handle('accounts:setActive', async (_event, id: string) => {
     await store.setActiveAccount(id)
+    return true
+  })
+
+  ipcMain.handle('accounts:microsoftStart', async () => {
+    const clientId = getConfiguredClientId()
+    if (!clientId) {
+      throw new Error('请先填写 Microsoft Azure 应用 Client ID')
+    }
+    const device = await requestDeviceCode(clientId)
+    const flowId = newId('ms_')
+    const abort = new AbortController()
+    microsoftFlows.set(flowId, {
+      abort,
+      deviceCode: device.device_code,
+      clientId,
+      interval: device.interval || 5,
+      expiresIn: device.expires_in || 900
+    })
+    return {
+      flowId,
+      userCode: device.user_code,
+      verificationUri: device.verification_uri,
+      expiresIn: device.expires_in || 900,
+      interval: device.interval || 5,
+      message: device.message
+    }
+  })
+
+  ipcMain.handle('accounts:microsoftWait', async (_event, flowId: string): Promise<Account> => {
+    const flow = microsoftFlows.get(flowId)
+    if (!flow) throw new Error('登录会话不存在或已取消')
+    try {
+      const token = await pollForMicrosoftToken(
+        flow.deviceCode,
+        flow.clientId,
+        flow.interval,
+        flow.expiresIn,
+        flow.abort.signal
+      )
+      const record = await completeMicrosoftLogin(token, flow.clientId, flow.abort.signal)
+      const existing = store
+        .getAccounts()
+        .find((account) => account.type === 'microsoft' && account.uuid === record.uuid)
+      if (existing) {
+        const updated = await store.updateAccount(existing.id, {
+          ...record,
+          id: existing.id
+        })
+        await store.setActiveAccount(existing.id)
+        return {
+          id: updated.id,
+          type: updated.type,
+          username: updated.username,
+          uuid: updated.uuid,
+          avatarUrl: updated.avatarUrl,
+          skinModel: updated.skinModel
+        }
+      }
+      return store.addAccount(record)
+    } finally {
+      microsoftFlows.delete(flowId)
+    }
+  })
+
+  ipcMain.handle('accounts:microsoftCancel', (_event, flowId: string) => {
+    const flow = microsoftFlows.get(flowId)
+    if (!flow) return false
+    flow.abort.abort()
+    microsoftFlows.delete(flowId)
     return true
   })
 
@@ -612,4 +694,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   for (const job of jobs.values()) job.abort.abort()
+  for (const flow of microsoftFlows.values()) flow.abort.abort()
 })

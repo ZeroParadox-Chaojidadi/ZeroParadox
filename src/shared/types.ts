@@ -47,6 +47,8 @@ export interface AccountRecord extends Account {
   accessToken?: string;
   refreshToken?: string;
   expiresAt?: number;
+  xuid?: string;
+  clientId?: string;
 }
 
 export interface Settings {
@@ -84,6 +86,15 @@ export interface JavaDetection {
   major: number;
   label: string;
   source: 'local' | 'downloaded';
+}
+
+export interface MicrosoftDeviceCodeInfo {
+  flowId: string;
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+  message?: string;
 }
 
 export interface VersionSummary {
@@ -311,6 +322,9 @@ export interface LauncherApi {
     addOffline: (username: string) => Promise<Account>;
     remove: (id: string) => Promise<boolean>;
     setActive: (id: string) => Promise<boolean>;
+    microsoftStart: () => Promise<MicrosoftDeviceCodeInfo>;
+    microsoftWait: (flowId: string) => Promise<Account>;
+    microsoftCancel: (flowId: string) => Promise<boolean>;
   };
   news: {
     list: () => Promise<NewsItem[]>;

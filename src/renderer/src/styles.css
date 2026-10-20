@@ -6369,6 +6369,207 @@ body,
   }
 }
 
+/* Microsoft account */
+
+.ms-login-entry {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
+  text-align: left;
+}
+
+.ms-login-entry:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.ms-login-logo,
+.ms-mark {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: #f25022;
+  color: #fff;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ms-login-entry > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ms-login-entry strong {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.ms-login-entry small {
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+.ms-login-entry > svg {
+  color: var(--muted);
+}
+
+.ms-login {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ms-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.ms-intro > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ms-intro strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ms-intro p {
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.ms-hint {
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+}
+
+.ms-hint > p {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.ms-hint .text-button {
+  margin: 5px 0 7px;
+  font-size: 10px;
+}
+
+.ms-hint ol {
+  margin: 0;
+  padding-left: 17px;
+  color: var(--muted-2);
+  font-size: 9.5px;
+  line-height: 1.8;
+}
+
+.ms-loading {
+  min-height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.device-code {
+  height: 64px;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 23px;
+  letter-spacing: 0.22em;
+  padding-left: 0.22em;
+}
+
+.device-code:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.device-code svg {
+  color: var(--accent);
+  letter-spacing: normal;
+}
+
+.ms-waiting-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.ms-waiting-row .text-button {
+  margin-left: auto;
+  font-size: 9.5px;
+}
+
+.ms-success,
+.ms-error {
+  min-height: 145px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.ms-success svg {
+  color: var(--accent);
+}
+
+.ms-success strong,
+.ms-error strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ms-success p,
+.ms-error p {
+  font-size: 10.5px;
+  color: var(--muted);
+  max-width: 380px;
+  line-height: 1.6;
+}
+
+.ms-error > svg {
+  color: var(--danger);
+}
+
+.ms-error .btn {
+  margin-top: 7px;
+}
+
+
 
 
 

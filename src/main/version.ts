@@ -168,6 +168,8 @@ export function buildLaunchArguments(options: {
   uuid: string
   accessToken: string
   userType: string
+  xuid?: string
+  clientId?: string
   gameDir: string
   assetsDir: string
   nativesDir: string
@@ -198,8 +200,8 @@ export function buildLaunchArguments(options: {
     auth_uuid: options.uuid,
     auth_access_token: options.accessToken,
     auth_session: `token:${options.accessToken}:${options.uuid}`,
-    clientid: '',
-    auth_xuid: '',
+    clientid: options.clientId || '',
+    auth_xuid: options.xuid || '',
     user_type: options.userType,
     version_type: resolved.type,
     natives_directory: options.nativesDir,

@@ -17,16 +17,35 @@
   使用 SHA-1 校验文件。
 - **Java 检测**：优先使用本机合适的 Java；没有时下载 Mojang Java Runtime。
 - **Modrinth**：按实例的游戏版本和加载器筛选内容，安装必需依赖。
-- **离线账户**：本地用户名、离线 UUID，可保存多个账户。
+- **账户**：离线账户，以及 Microsoft 正版登录（设备码流程）。
 - **日志**：启动过程和游戏输出可在实例详情中查看。
 - **本地数据**：设置、账户、游戏文件都保存在本机。
 
 ## 当前范围
 
 - 加载器：**Vanilla**、**Fabric**。
-- 账户：**离线账户**。尚未接入 Microsoft 登录，无法进入开启正版验证的服务器。
+- 账户：离线账户、Microsoft 正版账户。Microsoft 登录需要你自己的 Azure 应用
+  Client ID，且 Minecraft API 可能要求 Mojang 审批该应用。
 - 不支持 Forge、NeoForge、Quilt 自动安装，也不支持整合包导入。
 - 目前提供 Windows x64 构建。其他平台未测试。
+
+## 微软正版登录
+
+在账户窗口点击 **Microsoft 正版登录**，按界面提示填写 Azure 应用 Client ID：
+
+1. 在 [Azure Portal](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade/quickStartType~/null/isMSAApp~/true)
+   创建应用，账户类型选择“个人 Microsoft 账户”。
+2. 在 Authentication 中启用“允许公共客户端流”。
+3. 不需要 Client Secret 或重定向 URI。
+4. 把“应用程序(客户端) ID”粘贴到登录窗口。
+
+> 重要的限制：Minecraft 服务会拒绝未经 Mojang 授权的 Azure 应用，并提示
+> `Invalid app registration`。如果出现该错误，需要通过
+> [aka.ms/AppRegInfo](https://aka.ms/AppRegInfo) 提交启动器应用审批。
+> 这是 Microsoft/Mojang 的政策限制，不是启动器可以实现的工作。
+>
+> 授权码、访问令牌和刷新令牌保存在本机的 `launcher.json` 中；启动器不会
+> 向第三方服务器发送这些令牌。
 
 ## 运行
 

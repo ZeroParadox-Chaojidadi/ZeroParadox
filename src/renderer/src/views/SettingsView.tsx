@@ -22,6 +22,7 @@ interface SettingsViewProps {
   dataDir: string
   totalMemoryMb: number
   activeAccountName: string | null
+  activeAccountType: 'offline' | 'microsoft' | null
   onUpdate: (patch: Partial<Settings>) => Promise<void>
   onAccount: () => void
   onToast: (type: 'success' | 'error' | 'info', title: string, detail?: string) => void
@@ -33,6 +34,7 @@ export default function SettingsView({
   dataDir,
   totalMemoryMb,
   activeAccountName,
+  activeAccountType,
   onUpdate,
   onAccount,
   onToast
@@ -278,7 +280,13 @@ export default function SettingsView({
               <span className="settings-avatar">{activeAccountName?.slice(0, 1).toUpperCase() || '?'}</span>
               <div>
                 <strong>{activeAccountName || '未添加账户'}</strong>
-                <span>{activeAccountName ? '离线账户' : '添加账户后才能启动游戏'}</span>
+                <span>
+                  {activeAccountName
+                    ? activeAccountType === 'microsoft'
+                      ? 'Microsoft 账户'
+                      : '离线账户'
+                    : '添加账户后才能启动游戏'}
+                </span>
               </div>
             </div>
             <button className="btn btn-outline full" onClick={onAccount}>

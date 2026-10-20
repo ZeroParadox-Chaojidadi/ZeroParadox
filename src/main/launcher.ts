@@ -11,6 +11,7 @@ import { ensureDir, pathExists, sha1File } from './util'
 import { installInstance, InstallProgressUpdate } from './installer'
 import { ensureJavaRuntime } from './java'
 import { store } from './store'
+import { ensureMicrosoftSession } from './auth'
 import { CancelledError } from './http'
 
 interface RunningGame {
@@ -68,11 +69,22 @@ export async function launchInstance(
   if (running.has(instanceId)) throw new Error('这个实例已经在运行了')
   const instance = store.requireInstance(instanceId)
   const settings = store.getSettings()
-  const account = store.getActiveAccount()
+  let account = store.getActiveAccount()
   if (!account) throw new Error('请先添加并选择一个游戏账户')
   const emit = (update: LaunchProgress): void => options.onLaunchProgress?.(update)
   const log = (line: string, stream: LogEvent['stream'] = 'system'): void => {
     options.onLog?.({ instanceId, stream, line, time: Date.now() })
+  }
+
+  if (account.type === 'microsoft') {
+    emit({ kind: 'preparing', phase: '账户', message: '正在检查 Microsoft 登录状态…', percent: 1 })
+    try {
+      account = await ensureMicrosoftSession(account)
+    } catch (error) {
+      throw new Error(`Microsoft 账户验证失败：${messageOf(error)}`)
+    }
+    if (!account.accessToken) throw new Error('Microsoft 登录状态无效，请重新登录')
+    log(`使用 Microsoft 账户 ${account.username}`)
   }
 
   emit({ kind: 'preparing', phase: '准备启动', message: '正在检查游戏文件…', percent: 2 })
@@ -152,6 +164,8 @@ export async function launchInstance(
     uuid: account.uuid,
     accessToken: account.accessToken || '0',
     userType: account.type === 'microsoft' ? 'msa' : 'legacy',
+    xuid: account.xuid,
+    clientId: account.clientId,
     gameDir: gameDir(instance.id),
     assetsDir: getPaths().assets,
     nativesDir,
