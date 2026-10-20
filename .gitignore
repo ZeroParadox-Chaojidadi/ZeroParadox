@@ -1,0 +1,14 @@
+node_modules/
+out/
+release/
+dist/
+.testdata/
+.integration/
+.artifacts/
+.installtest/
+.tools/
+*.log
+java_all.json
+.DS_Store
+
+*.tsbuildinfo

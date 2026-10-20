@@ -1,0 +1,93 @@
+{
+  "name": "zeroparadox-launcher",
+  "version": "1.0.0",
+  "packageManager": "pnpm@11.28.5",
+  "description": "零式悖论 — 一个现代、轻量的 Minecraft 启动器",
+  "main": "./out/main/index.js",
+  "author": "ZeroParadox",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "build": "electron-vite build",
+    "dist": "electron-vite build && electron-builder --win nsis portable",
+    "dist:dir": "electron-vite build && electron-builder --win --dir"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "adm-zip": "^0.5.16",
+    "electron": "^44.9.2",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "lucide-react": "^0.550.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "5.9.3",
+    "vite": "^8.3.4"
+  },
+  "build": {
+    "appId": "com.zeroparadox.launcher",
+    "productName": "ZeroParadox",
+    "artifactName": "ZeroParadox-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "asarUnpack": [],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "零式悖论",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "language": "2052"
+    },
+    "portable": {
+      "artifactName": "ZeroParadox-${version}-portable.${ext}"
+    }
+  }
+}
