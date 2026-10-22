@@ -19,6 +19,7 @@ import ToastViewport from './components/ToastViewport'
 import CreateInstanceModal from './components/CreateInstanceModal'
 import AccountModal from './components/AccountModal'
 import MicrosoftLoginModal from './components/MicrosoftLoginModal'
+import YggdrasilLoginModal from './components/YggdrasilLoginModal'
 import TaskModal from './components/TaskModal'
 import Modal from './components/Modal'
 import LibraryView from './views/LibraryView'
@@ -57,6 +58,7 @@ export default function App(): React.JSX.Element {
   const [pendingFolder, setPendingFolder] = useState<string | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [msLoginOpen, setMsLoginOpen] = useState(false)
+  const [yggLoginOpen, setYggLoginOpen] = useState(false)
   const [runningIds, setRunningIds] = useState<string[]>([])
   const [launchingId, setLaunchingId] = useState<string | null>(null)
   const [task, setTask] = useState<TaskState | null>(null)
@@ -678,7 +680,7 @@ export default function App(): React.JSX.Element {
         />
       )}
 
-      {accountOpen && !msLoginOpen && (
+      {accountOpen && !msLoginOpen && !yggLoginOpen && (
         <AccountModal
           accounts={data.accounts}
           activeAccountId={data.activeAccountId}
@@ -687,6 +689,17 @@ export default function App(): React.JSX.Element {
           onRemove={removeAccount}
           onSetActive={setActive}
           onMicrosoftLogin={() => setMsLoginOpen(true)}
+          onYggdrasilLogin={() => setYggLoginOpen(true)}
+        />
+      )}
+
+      {yggLoginOpen && (
+        <YggdrasilLoginModal
+          onClose={() => setYggLoginOpen(false)}
+          onSuccess={async () => {
+            await refresh()
+          }}
+          onToast={pushToast}
         />
       )}
 

@@ -23,7 +23,7 @@ interface SettingsViewProps {
   dataDir: string
   totalMemoryMb: number
   activeAccountName: string | null
-  activeAccountType: 'offline' | 'microsoft' | null
+  activeAccountType: 'offline' | 'microsoft' | 'yggdrasil' | null
   onUpdate: (patch: Partial<Settings>) => Promise<void>
   onAccount: () => void
   onToast: (type: 'success' | 'error' | 'info', title: string, detail?: string) => void
@@ -376,7 +376,9 @@ export default function SettingsView({
                   {activeAccountName
                     ? activeAccountType === 'microsoft'
                       ? 'Microsoft 账户'
-                      : '离线账户'
+                      : activeAccountType === 'yggdrasil'
+                        ? '第三方账户'
+                        : '离线账户'
                     : '添加账户后才能启动游戏'}
                 </span>
               </div>

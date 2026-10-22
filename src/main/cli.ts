@@ -30,6 +30,7 @@ import {
 } from './auth'
 import { installForge } from './forge'
 import { getNeoForgeLoaders, installNeoForge } from './neoforge'
+import { ensureAuthlibInjector } from './yggdrasil'
 import { addExistingInstance, inspectExistingFolder, scanExistingFolders } from './existing'
 import {
   applyModpackFiles,
@@ -73,6 +74,14 @@ async function main(): Promise<void> {
         console.log(`[modpack ${update.percent}%] ${update.phase}: ${update.message}`)
     })
     console.log(`[modpack] instance=${instance.id} name=${instance.name} version=${instance.gameVersion}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'authlib-check') {
+    const jar = await ensureAuthlibInjector()
+    const stat = await (await import('fs')).promises.stat(jar)
+    console.log(`[authlib] ${jar} (${Math.round(stat.size / 1024)} KB)`)
     setTimeout(() => app.quit(), 300)
     return
   }

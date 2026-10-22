@@ -13,6 +13,7 @@ interface AccountModalProps {
   onRemove: (id: string) => Promise<void>
   onSetActive: (id: string) => Promise<void>
   onMicrosoftLogin: () => void
+  onYggdrasilLogin: () => void
 }
 
 export default function AccountModal({
@@ -22,7 +23,8 @@ export default function AccountModal({
   onAddOffline,
   onRemove,
   onSetActive,
-  onMicrosoftLogin
+  onMicrosoftLogin,
+  onYggdrasilLogin
 }: AccountModalProps): React.JSX.Element {
   const [username, setUsername] = useState('')
   const [loading, setLoading] = useState(false)
@@ -71,6 +73,16 @@ export default function AccountModal({
         <ChevronRight size={15} />
       </button>
 
+      <button className="ms-login-entry" onClick={onYggdrasilLogin}>
+        <span className="ms-login-logo">Y</span>
+        <span>
+          <strong>第三方登录（Yggdrasil）</strong>
+          <small>皮肤站 / 外置登录，使用账号密码</small>
+        </span>
+        <LogIn size={17} />
+        <ChevronRight size={15} />
+      </button>
+
       <div className="account-list">
         {accounts.map((account) => (
           <div key={account.id} className={cn('account-row', account.id === activeAccountId && 'active')}>
@@ -80,7 +92,13 @@ export default function AccountModal({
               </span>
               <span>
                 <strong>{account.username}</strong>
-                <small>{account.type === 'offline' ? '离线账户' : 'Microsoft 账户'}</small>
+                <small>
+                  {account.type === 'offline'
+                    ? '离线账户'
+                    : account.type === 'yggdrasil'
+                      ? '第三方账户'
+                      : 'Microsoft 账户'}
+                </small>
               </span>
               {account.id === activeAccountId && <em className="active-badge"><Check size={12} /> 当前</em>}
             </button>

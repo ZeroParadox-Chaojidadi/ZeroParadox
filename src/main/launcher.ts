@@ -14,6 +14,7 @@ import { store } from './store'
 import { ensureMicrosoftSession } from './auth'
 import { ensureForgeInstalled } from './forge'
 import { ensureNeoForgeInstalled } from './neoforge'
+import { ensureAuthlibInjector } from './yggdrasil'
 import { CancelledError } from './http'
 
 interface RunningGame {
@@ -201,6 +202,15 @@ export async function launchInstance(
   const assetIndexId = resolved.versionJson.assetIndex?.id || resolved.versionJson.assets || 'legacy'
 
   const memory = clampMemory(instance.memoryMb ?? settings.memoryMb)
+  let extraJvmArgs = instance.jvmArgs
+  let userType = account.type === 'microsoft' ? 'msa' : 'legacy'
+  if (account.type === 'yggdrasil') {
+    if (!account.server) throw new Error('第三方账户缺少登录服务器地址，请重新登录')
+    const injector = await ensureAuthlibInjector(options.signal)
+    extraJvmArgs = `-javaagent:${injector}=${account.server} ${extraJvmArgs}`.trim()
+    userType = 'mojang'
+  }
+
   const args = buildLaunchArguments({
     instance,
     resolved,
@@ -208,7 +218,7 @@ export async function launchInstance(
     username: account.username,
     uuid: account.uuid,
     accessToken: account.accessToken || '0',
-    userType: account.type === 'microsoft' ? 'msa' : 'legacy',
+    userType,
     xuid: account.xuid,
     clientId: account.clientId,
     gameDir: gameDir(instance.id),
@@ -219,7 +229,7 @@ export async function launchInstance(
     assetIndex: assetIndexId,
     loggingArgument,
     memoryMb: memory,
-    extraJvmArgs: instance.jvmArgs,
+    extraJvmArgs,
     extraGameArgs: instance.gameArgs
   }).args
 

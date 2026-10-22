@@ -34,7 +34,7 @@ export interface Instance {
   resolution: Resolution;
 }
 
-export type AccountType = 'offline' | 'microsoft';
+export type AccountType = 'offline' | 'microsoft' | 'yggdrasil';
 
 export interface Account {
   id: string;
@@ -51,6 +51,9 @@ export interface AccountRecord extends Account {
   expiresAt?: number;
   xuid?: string;
   clientId?: string;
+  /** 第三方登录（Yggdrasil）的 API 根地址。 */
+  server?: string;
+  clientToken?: string;
 }
 
 export interface Settings {
@@ -399,6 +402,7 @@ export interface LauncherApi {
   };
   accounts: {
     addOffline: (username: string) => Promise<Account>;
+    yggdrasilLogin: (server: string, username: string, password: string) => Promise<Account>;
     remove: (id: string) => Promise<boolean>;
     setActive: (id: string) => Promise<boolean>;
     microsoftStart: () => Promise<MicrosoftDeviceCodeInfo>;

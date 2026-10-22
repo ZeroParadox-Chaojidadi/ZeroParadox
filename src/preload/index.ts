@@ -109,6 +109,8 @@ const api: LauncherApi = {
   },
   accounts: {
     addOffline: (username: string) => ipcRenderer.invoke('accounts:addOffline', username) as Promise<Account>,
+    yggdrasilLogin: (server: string, username: string, password: string) =>
+      ipcRenderer.invoke('accounts:yggdrasilLogin', server, username, password) as Promise<Account>,
     remove: (id: string) => ipcRenderer.invoke('accounts:remove', id) as Promise<boolean>,
     setActive: (id: string) => ipcRenderer.invoke('accounts:setActive', id) as Promise<boolean>,
     microsoftStart: () => ipcRenderer.invoke('accounts:microsoftStart') as Promise<MicrosoftDeviceCodeInfo>,

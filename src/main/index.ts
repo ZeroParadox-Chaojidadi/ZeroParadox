@@ -7,6 +7,7 @@ import path from 'path'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import type {
   Account,
+  AccountRecord,
   AppInfo,
   ContentKind,
   Instance,
@@ -53,6 +54,7 @@ import {
   openPackZip
 } from './modpack'
 import { addExistingInstance, addExistingMany, inspectExistingFolder, scanExistingFolders } from './existing'
+import { authenticateYggdrasil } from './yggdrasil'
 import { moveDir, newId, offlineUuid, pathExists } from './util'
 import { CancelledError } from './http'
 import {
@@ -740,6 +742,31 @@ function registerIpc(): void {
     await store.setActiveAccount(id)
     return true
   })
+
+  ipcMain.handle(
+    'accounts:yggdrasilLogin',
+    async (_event, server: string, username: string, password: string): Promise<Account> => {
+      const session = await authenticateYggdrasil(String(server || ''), String(username || ''), String(password || ''))
+      const record: AccountRecord = {
+        id: newId('acc_ys_'),
+        type: 'yggdrasil',
+        username: session.profile.name,
+        uuid: session.profile.id,
+        accessToken: session.accessToken,
+        clientToken: session.clientToken,
+        server: session.server
+      }
+      const existing = store
+        .getAccounts()
+        .find((account) => account.type === 'yggdrasil' && account.server === record.server && account.uuid === record.uuid)
+      if (existing) {
+        await store.updateAccount(existing.id, record)
+        await store.setActiveAccount(existing.id)
+        return store.getAccounts().find((account) => account.id === existing.id) as Account
+      }
+      return store.addAccount(record)
+    }
+  )
 
   ipcMain.handle('accounts:microsoftStart', async () => {
     const clientId = getConfiguredClientId()
