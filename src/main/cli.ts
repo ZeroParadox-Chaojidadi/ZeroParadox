@@ -30,7 +30,7 @@ import {
 } from './auth'
 import { installForge } from './forge'
 import { getNeoForgeLoaders, installNeoForge } from './neoforge'
-import { ensureAuthlibInjector } from './yggdrasil'
+import { ensureAuthlibInjector, fetchYggdrasilHead } from './yggdrasil'
 import { addExistingInstance, inspectExistingFolder, scanExistingFolders } from './existing'
 import {
   applyModpackFiles,
@@ -74,6 +74,16 @@ async function main(): Promise<void> {
         console.log(`[modpack ${update.percent}%] ${update.phase}: ${update.message}`)
     })
     console.log(`[modpack] instance=${instance.id} name=${instance.name} version=${instance.gameVersion}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'ygg-avatar') {
+    const server = process.env.ZP_CLI_SERVER?.trim() || 'https://skin.zeroparadox.xyz/api/yggdrasil'
+    const uuid = process.env.ZP_CLI_UUID?.trim()
+    if (!uuid) throw new Error('Set ZP_CLI_UUID')
+    const url = await fetchYggdrasilHead(server, uuid)
+    console.log(`[avatar] ${url ? `len=${url.length} head=${url.slice(0, 40)}…` : 'null'}`)
     setTimeout(() => app.quit(), 300)
     return
   }

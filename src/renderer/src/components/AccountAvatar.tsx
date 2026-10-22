@@ -13,11 +13,12 @@ interface AccountAvatarProps {
 export default function AccountAvatar({ account }: AccountAvatarProps): React.JSX.Element {
   const custom =
     account.avatarUrl && !isLegacyAvatarUrl(account.avatarUrl) ? account.avatarUrl : null
+  // 第三方账户的皮肤来自它自己的服务器，不能用 Mojang 头像服务兜底。
   const candidates = custom
     ? [custom]
-    : account.uuid
-      ? minecraftAvatarFallbacks(account.uuid)
-      : []
+    : account.type === 'yggdrasil' || !account.uuid
+      ? []
+      : minecraftAvatarFallbacks(account.uuid)
   const [failed, setFailed] = useState(0)
   const url = candidates[failed]
 

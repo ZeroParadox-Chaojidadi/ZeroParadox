@@ -54,7 +54,7 @@ import {
   openPackZip
 } from './modpack'
 import { addExistingInstance, addExistingMany, inspectExistingFolder, scanExistingFolders } from './existing'
-import { authenticateYggdrasil } from './yggdrasil'
+import { authenticateYggdrasil, fetchYggdrasilHead } from './yggdrasil'
 import { moveDir, newId, offlineUuid, pathExists } from './util'
 import { CancelledError } from './http'
 import {
@@ -747,6 +747,7 @@ function registerIpc(): void {
     'accounts:yggdrasilLogin',
     async (_event, server: string, username: string, password: string): Promise<Account> => {
       const session = await authenticateYggdrasil(String(server || ''), String(username || ''), String(password || ''))
+      const avatarUrl = await fetchYggdrasilHead(session.server, session.profile.id).catch(() => null)
       const record: AccountRecord = {
         id: newId('acc_ys_'),
         type: 'yggdrasil',
@@ -754,7 +755,8 @@ function registerIpc(): void {
         uuid: session.profile.id,
         accessToken: session.accessToken,
         clientToken: session.clientToken,
-        server: session.server
+        server: session.server,
+        avatarUrl
       }
       const existing = store
         .getAccounts()
@@ -942,6 +944,15 @@ function registerIpc(): void {
 }
 
 
+/** 启动后补齐第三方账户的头像（只处理还没有头像的）。 */
+async function refreshYggdrasilAvatars(): Promise<void> {
+  for (const account of store.getAccounts()) {
+    if (account.type !== 'yggdrasil' || !account.server || account.avatarUrl) continue
+    const head = await fetchYggdrasilHead(account.server, account.uuid).catch(() => null)
+    if (head) await store.updateAccount(account.id, { avatarUrl: head }).catch(() => undefined)
+  }
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     const clean = error.message.replace(/^Error invoking remote method '[^']+': Error: /, '')
@@ -969,6 +980,7 @@ app.whenReady().then(async () => {
 
   initPaths()
   await store.load()
+  void refreshYggdrasilAvatars()
   registerIpc()
   setLaunchCallbacks({
     onLog: (event) => send('log:event', event),

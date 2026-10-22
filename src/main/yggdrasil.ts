@@ -147,3 +147,52 @@ export async function ensureAuthlibInjector(signal?: AbortSignal): Promise<strin
   }
   return file
 }
+
+/**
+ * 从 Yggdrasil 服务器取皮肤，并把头部裁成 64x64 的 data URL（供账户列表显示）。
+ * 皮肤站通常提供 64x64 或 128x128 的整张皮肤图，这里只取头部 8x8 区域。
+ */
+export async function fetchYggdrasilHead(
+  server: string,
+  uuid: string,
+  signal?: AbortSignal
+): Promise<string | null> {
+  try {
+    const base = normalizeYggdrasilServer(server)
+    const id = String(uuid || '').replace(/-/g, '')
+    if (!id) return null
+    const profileRes = await fetch(`${base}/sessionserver/session/minecraft/profile/${id}`, { signal })
+    if (!profileRes.ok) return null
+    const profile = (await profileRes.json()) as {
+      properties?: Array<{ name?: string; value?: string }>
+    }
+    const prop = (profile.properties || []).find((item) => item.name === 'textures')
+    if (!prop?.value) return null
+    const payload = JSON.parse(Buffer.from(prop.value, 'base64').toString('utf8')) as {
+      textures?: { SKIN?: { url?: string } }
+    }
+    const skinUrl = payload.textures?.SKIN?.url
+    if (!skinUrl) return null
+
+    const skinRes = await fetch(skinUrl, { signal })
+    if (!skinRes.ok) return null
+    const buffer = Buffer.from(await skinRes.arrayBuffer())
+    const { nativeImage } = await import('electron')
+    const image = nativeImage.createFromBuffer(buffer)
+    if (image.isEmpty()) return null
+    const size = image.getSize()
+    if (size.width < 64 || size.height < 32) return null
+    const scale = size.width / 64
+    const head = image
+      .crop({
+        x: Math.floor(8 * scale),
+        y: Math.floor(8 * scale),
+        width: Math.floor(8 * scale),
+        height: Math.floor(8 * scale)
+      })
+      .resize({ width: 64, height: 64, quality: 'best' })
+    return head.toDataURL()
+  } catch {
+    return null
+  }
+}
