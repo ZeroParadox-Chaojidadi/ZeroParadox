@@ -2,7 +2,7 @@
   "name": "zeroparadox-launcher",
   "version": "1.0.0",
   "packageManager": "pnpm@11.28.5",
-  "description": "零式悖论 — 一个现代、轻量的 Minecraft 启动器",
+  "description": "ZeroParadox — 一个现代、轻量的 Minecraft 启动器",
   "main": "./out/main/index.js",
   "author": "ZeroParadox",
   "license": "MIT",
@@ -40,7 +40,7 @@
   "build": {
     "appId": "com.zeroparadox.launcher",
     "productName": "ZeroParadox",
-    "artifactName": "ZeroParadox-${version}-${arch}.${ext}",
+    "artifactName": "ZeroParadox-${arch}.${ext}",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -81,14 +81,14 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "零式悖论",
+      "shortcutName": "ZeroParadox",
       "installerLanguages": [
         "zh_CN"
       ],
       "language": "2052"
     },
     "portable": {
-      "artifactName": "ZeroParadox-${version}-portable.${ext}"
+      "artifactName": "ZeroParadox-portable.${ext}"
     }
   }
 }

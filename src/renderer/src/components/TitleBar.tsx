@@ -16,7 +16,7 @@ export default function TitleBar({ pageName, onHome }: { pageName: string; onHom
       <button className="titlebar-brand" onClick={onHome}>
         <img src={logo} alt="" className="brand-logo" />
         <div className="brand-text">
-          <strong>零式悖论</strong>
+          <strong>ZeroParadox</strong>
           <span>ZEROPARADOX</span>
         </div>
       </button>

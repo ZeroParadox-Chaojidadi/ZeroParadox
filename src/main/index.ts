@@ -111,7 +111,7 @@ function createWindow(): void {
     show: false,
     frame: false,
     backgroundColor: '#0b0f13',
-    title: '零式悖论',
+    title: 'ZeroParadox',
     icon: iconPath,
     autoHideMenuBar: true,
     webPreferences: {

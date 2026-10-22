@@ -46,7 +46,7 @@ export async function getNews(): Promise<NewsItem[]> {
 function fallbackNews(): NewsItem[] {
   return [
     {
-      title: '欢迎来到零式悖论',
+      title: '欢迎来到 ZeroParadox',
       category: '启动器',
       date: new Date().toISOString().slice(0, 10),
       text: '选择一个游戏版本，创建你的第一个实例。启动器会自动补全游戏文件、资源与 Java 运行时。',

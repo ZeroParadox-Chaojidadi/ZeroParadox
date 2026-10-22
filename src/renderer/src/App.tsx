@@ -533,7 +533,7 @@ export default function App(): React.JSX.Element {
       <div className="boot-screen">
         <div className="boot-glow" />
         <img src={logo} alt="" />
-        <h1>零式悖论</h1>
+        <h1>ZeroParadox</h1>
         <span className="boot-tagline">ZEROPARADOX LAUNCHER</span>
         <div className="boot-loader"><span /></div>
         <p>正在整理你的世界…</p>

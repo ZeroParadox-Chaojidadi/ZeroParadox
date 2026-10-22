@@ -1,4 +1,4 @@
-# 零式悖论 / ZeroParadox
+# ZeroParadox
 
 一个用 Electron、React 和 TypeScript 编写的 Minecraft 启动器。红黑纯色界面，
 支持原版 / Fabric 实例、自动安装游戏文件、自动选择 Java，以及从 Modrinth
@@ -83,7 +83,7 @@ release/ZeroParadox-1.0.0-portable.exe   便携版
 
 ## 启动问题
 
-安装后请使用桌面或开始菜单里的 **零式悖论** 快捷方式。
+安装后请使用桌面或开始菜单里的 **ZeroParadox** 快捷方式。
 
 - `ZeroParadox.exe` 是一个很小的启动包装器：会清理
   `ELECTRON_RUN_AS_NODE`，并兼容无法初始化 Chromium 沙箱的 Windows 会话。

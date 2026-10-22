@@ -424,7 +424,7 @@ export default function SettingsView({
 
           <div className="panel about-card">
             <span className="about-logo">◇</span>
-            <h3>零式悖论</h3>
+            <h3>ZeroParadox</h3>
             <div className="about-meta">
               <span>版本 {appInfo?.version}</span>
               <span>Electron {appInfo?.electron}</span>
