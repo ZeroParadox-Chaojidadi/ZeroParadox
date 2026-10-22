@@ -128,7 +128,9 @@ const api: LauncherApi = {
         ModrinthVersion[]
       >,
     install: (instanceId: string, projectId: string, kind: ContentKind, versionId?: string) =>
-      ipcRenderer.invoke('modrinth:install', instanceId, projectId, kind, versionId) as Promise<InstallSummary>
+      ipcRenderer.invoke('modrinth:install', instanceId, projectId, kind, versionId) as Promise<InstallSummary>,
+    downloadFile: (versionId: string, targetDir: string) =>
+      ipcRenderer.invoke('modrinth:downloadFile', versionId, targetDir) as Promise<string>
   },
   content: {
     list: (instanceId: string, kind: ContentKind) =>

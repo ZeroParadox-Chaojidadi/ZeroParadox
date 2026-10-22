@@ -554,3 +554,26 @@ function sanitizeFileName(name: string): string {
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
+
+/** 只把某个版本的主文件下载到指定目录，不安装到任何实例。 */
+export async function downloadVersionFile(
+  versionId: string,
+  targetDir: string,
+  signal?: AbortSignal
+): Promise<string> {
+  const dir = path.resolve(String(targetDir || '').trim())
+  if (!dir) throw new Error('请选择保存目录')
+  const stat = await fs.stat(dir).catch(() => null)
+  if (!stat?.isDirectory()) throw new Error('保存目录不存在')
+  const raw = await fetchJson<RawVersion>(`${API}/version/${encodeURIComponent(versionId)}`, { signal })
+  const version = mapVersion(raw)
+  const file = version.files.find((item) => item.primary) || version.files[0]
+  if (!file) throw new Error('这个版本没有可下载的文件')
+  const target = path.join(dir, path.basename(file.filename))
+  await downloadFile(file.url, target, {
+    sha1: file.hashes?.sha1,
+    size: file.size,
+    signal
+  })
+  return target
+}

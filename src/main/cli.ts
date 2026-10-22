@@ -21,7 +21,7 @@ import { moveDir } from './util'
 import { getVersionManifest, findVersion, installFabricProfile } from './mojang'
 import { installInstance } from './installer'
 import { launchInstance } from './launcher'
-import { listContent, searchProjects, installProject } from './modrinth'
+import { listContent, searchProjects, installProject, downloadVersionFile } from './modrinth'
 import {
   completeMicrosoftLogin,
   getConfiguredClientId,
@@ -74,6 +74,16 @@ async function main(): Promise<void> {
         console.log(`[modpack ${update.percent}%] ${update.phase}: ${update.message}`)
     })
     console.log(`[modpack] instance=${instance.id} name=${instance.name} version=${instance.gameVersion}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'mod-download') {
+    const versionId = process.env.ZP_CLI_VERSION_ID?.trim()
+    const dir = process.env.ZP_CLI_DIR?.trim()
+    if (!versionId || !dir) throw new Error('Set ZP_CLI_VERSION_ID and ZP_CLI_DIR')
+    const saved = await downloadVersionFile(versionId, dir)
+    console.log(`[mod] saved ${saved}`)
     setTimeout(() => app.quit(), 300)
     return
   }

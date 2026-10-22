@@ -25,6 +25,7 @@ export default function ProjectModal({
   const [selectedVersion, setSelectedVersion] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [installing, setInstalling] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState(false)
 
@@ -73,6 +74,23 @@ export default function ProjectModal({
     }
   }
 
+  const saveFile = async (): Promise<void> => {
+    if (!project || !selectedVersion) return
+    const dir = await api.dialog.pickDirectory().catch(() => null)
+    if (!dir) return
+    setSaving(true)
+    setError('')
+    try {
+      const saved = await api.modrinth.downloadFile(selectedVersion, dir)
+      onInstalled(`已下载 ${saved.split(/[\/]/).pop() || '文件'}`)
+      onClose()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const version = versions.find((item) => item.id === selectedVersion)
   const body = project ? cleanMarkdown(project.body) : ''
 
@@ -99,8 +117,16 @@ export default function ProjectModal({
               取消
             </button>
             <button
+              className="btn btn-outline"
+              disabled={!project || !selectedVersion || saving || installing}
+              onClick={() => void saveFile()}
+            >
+              {saving ? <Loader2 size={16} className="spin" /> : <Download size={16} />}
+              {saving ? '正在下载…' : '仅下载文件'}
+            </button>
+            <button
               className="btn btn-primary"
-              disabled={!project || !selectedVersion || installing}
+              disabled={!project || !selectedVersion || installing || saving}
               onClick={() => void install()}
             >
               {installing ? <Loader2 size={16} className="spin" /> : <Download size={16} />}

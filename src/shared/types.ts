@@ -429,6 +429,8 @@ export interface LauncherApi {
       loader: string,
       kind: ContentKind
     ) => Promise<ModrinthVersion[]>;
+    /** 只下载某个版本的主文件到指定目录，返回保存路径。 */
+    downloadFile: (versionId: string, targetDir: string) => Promise<string>;
     install: (
       instanceId: string,
       projectId: string,

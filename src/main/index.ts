@@ -39,6 +39,7 @@ import {
   getProjectVersions,
   importContentFiles,
   installProject,
+  downloadVersionFile,
   listContent,
   listWorlds,
   searchProjects,
@@ -860,6 +861,9 @@ function registerIpc(): void {
     'modrinth:versions',
     async (_event, projectId: string, gameVersion: string, loader: string, kind: ContentKind) =>
       getProjectVersions(projectId, gameVersion, loader, kind)
+  )
+  ipcMain.handle('modrinth:downloadFile', async (_event, versionId: string, targetDir: string) =>
+    downloadVersionFile(String(versionId || ''), String(targetDir || ''))
   )
   ipcMain.handle(
     'modrinth:install',
