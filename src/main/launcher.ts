@@ -13,6 +13,7 @@ import { ensureJavaRuntime } from './java'
 import { store } from './store'
 import { ensureMicrosoftSession } from './auth'
 import { ensureForgeInstalled } from './forge'
+import { ensureNeoForgeInstalled } from './neoforge'
 import { CancelledError } from './http'
 
 interface RunningGame {
@@ -110,6 +111,27 @@ export async function launchInstance(
       throw new Error(`安装 Forge 失败：${messageOf(error)}`)
     }
   }
+  if (instance.loader.type === 'neoforge') {
+    emit({ kind: 'preparing', phase: 'NeoForge', message: '正在检查 NeoForge 安装…', percent: 2 })
+    try {
+      instance = await ensureNeoForgeInstalled(instance, {
+        source: settings.downloadSource,
+        signal: options.signal,
+        settings,
+        onProgress: (update) => {
+          emit({
+            kind: 'install',
+            phase: update.phase,
+            message: update.message,
+            percent: Math.min(88, update.percent)
+          })
+        }
+      })
+    } catch (error) {
+      if (error instanceof CancelledError) throw error
+      throw new Error(`安装 NeoForge 失败：${messageOf(error)}`)
+    }
+  }
   let resolved: ResolvedVersion
   try {
     resolved = await resolveVersion(instance.versionId, settings.downloadSource, options.signal)
@@ -156,7 +178,7 @@ export async function launchInstance(
         percent: 88 + 7 * (progress.bytesTotal > 0 ? progress.bytesDone / progress.bytesTotal : 0)
       })
     },
-    { exact: instance.loader.type === 'forge' }
+    { exact: instance.loader.type === 'forge' || instance.loader.type === 'neoforge' }
   )
   log(`使用 ${java.label}：${java.path}`)
 

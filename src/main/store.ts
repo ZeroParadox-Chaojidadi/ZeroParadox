@@ -7,7 +7,9 @@ import type {
   PublicState,
   Settings
 } from '../shared/types'
-import { getPaths, gameDir, instanceDir } from './paths'
+import { BUILT_IN_MICROSOFT_CLIENT_ID } from '../shared/azure'
+import { resolveAvatarUrl } from '../shared/avatar'
+import { getPaths, gameDir, instanceDir, setCustomGameDirResolver } from './paths'
 import { ensureDir, newId, readJson, safeName, writeJsonAtomic } from './util'
 
 interface PersistedState {
@@ -32,7 +34,8 @@ export const defaultSettings: Settings = {
   minimizeOnLaunch: false,
   checkUpdates: true,
   closeAfterGameExit: false,
-  microsoftClientId: ''
+  microsoftClientId: BUILT_IN_MICROSOFT_CLIENT_ID,
+  extraJavaPaths: []
 }
 
 const palette = ['#ff4d4f', '#e5484d', '#b42318', '#ff7a7a', '#d92d20', '#ff2e63', '#f43f5e']
@@ -66,6 +69,7 @@ function normalizeInstance(raw: Partial<Instance>): Instance {
     playtimeMs: Number(raw.playtimeMs) || 0,
     memoryMb: typeof raw.memoryMb === 'number' ? raw.memoryMb : null,
     javaPath: raw.javaPath || null,
+    gameDir: raw.gameDir?.trim() || null,
     jvmArgs: raw.jvmArgs || '',
     gameArgs: raw.gameArgs || '',
     resolution: {
@@ -90,7 +94,17 @@ export class LauncherStore {
     const raw = await readJson<Partial<PersistedState>>(paths.stateFile, {})
     const merged = initialState()
     if (raw.settings) merged.settings = { ...defaultSettings, ...raw.settings }
+    // 旧版本默认值为空字符串，迁移到内置的已审批 appID。
+    if (!merged.settings.microsoftClientId.trim()) {
+      merged.settings.microsoftClientId = BUILT_IN_MICROSOFT_CLIENT_ID
+    }
     if (Array.isArray(raw.accounts)) merged.accounts = raw.accounts.filter((a) => a && a.id)
+    // 早期版本用 mc-heads.net，该域名在部分网络下返回 403，迁移到可用的头像服务。
+    for (const account of merged.accounts) {
+      if (account.avatarUrl) {
+        account.avatarUrl = resolveAvatarUrl(account.avatarUrl, account.uuid)
+      }
+    }
     if (raw.activeAccountId) merged.activeAccountId = raw.activeAccountId
     if (Array.isArray(raw.instances)) merged.instances = raw.instances.map(normalizeInstance)
     this.state = merged
@@ -142,6 +156,8 @@ export class LauncherStore {
     color?: string
     memoryMb?: number | null
     notes?: string
+    /** 指向已有游戏目录（添加现有实例时使用）；为空则用数据目录下的默认位置。 */
+    gameDir?: string | null
   }): Promise<Instance> {
     const instance = normalizeInstance({
       id: newId('inst_'),
@@ -152,7 +168,8 @@ export class LauncherStore {
       icon: input.icon,
       color: input.color,
       memoryMb: input.memoryMb ?? null,
-      notes: input.notes
+      notes: input.notes,
+      gameDir: input.gameDir ?? null
     })
     await ensureDir(instanceDir(instance.id))
     await ensureDir(gameDir(instance.id))
@@ -189,7 +206,8 @@ export class LauncherStore {
       name: `${source.name} 副本`,
       createdAt: new Date().toISOString(),
       lastPlayedAt: null,
-      playtimeMs: 0
+      playtimeMs: 0,
+      gameDir: null
     })
     await ensureDir(instanceDir(copy.id))
     await fs.cp(gameDir(id), gameDir(copy.id), { recursive: true, errorOnExist: false }).catch(() => undefined)
@@ -290,3 +308,6 @@ export function publicAccount(account: AccountRecord): Account {
 }
 
 export const store = new LauncherStore()
+
+// 实例可以覆盖默认游戏目录，路径工具通过这个回调读取，避免 paths ↔ store 循环依赖。
+setCustomGameDirResolver((instanceId) => store.getInstance(instanceId)?.gameDir ?? null)

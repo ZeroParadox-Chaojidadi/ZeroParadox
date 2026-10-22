@@ -24,8 +24,10 @@ import {
   Square,
   Terminal,
   Trash2,
+  Upload,
   UserRound
 } from 'lucide-react'
+import type { DragEvent } from 'react'
 import type { ContentEntry, ContentKind, Instance, WorldEntry } from '../../../shared/types'
 import { api, cn, errorMessage, formatBytes, formatDate, formatPlaytime, loaderLabel } from '../lib/utils'
 import type { InstanceTab } from '../types'
@@ -249,6 +251,7 @@ function ContentTab({
   const [entries, setEntries] = useState<ContentEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const labels: Record<ContentKind, { title: string; description: string; folder: string }> = {
     mod: { title: '模组', description: '扩展游戏内容，需要 Fabric 加载器支持。', folder: 'mods' },
@@ -299,8 +302,61 @@ function ContentTab({
     }
   }
 
+  const expectedExt = kind === 'mod' || kind === 'datapack' ? '.jar' : '.zip'
+
+  const importFiles = async (event: DragEvent<HTMLDivElement>): Promise<void> => {
+    event.preventDefault()
+    setDragging(false)
+    const files = Array.from(event.dataTransfer?.files ?? [])
+    if (files.length === 0) return
+    const paths = files
+      .map((file) => api.files.pathForFile(file))
+      .filter((value): value is string => Boolean(value))
+    if (paths.length === 0) return
+    setBusy('__import__')
+    try {
+      const result = await api.content.import(instance.id, kind, paths)
+      if (result.imported.length > 0) {
+        await load()
+        onToast(
+          'success',
+          `已导入 ${result.imported.length} 个文件`,
+          result.imported.slice(0, 3).join('、')
+        )
+      }
+      if (result.skipped.length > 0) {
+        const first = result.skipped[0]
+        onToast('info', `跳过 ${result.skipped.length} 个文件`, `${first.file}：${first.reason}`)
+      }
+    } catch (error) {
+      onToast('error', '导入失败', errorMessage(error))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const dragHandlers = {
+    onDragOver: (event: DragEvent<HTMLDivElement>): void => {
+      if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return
+      event.preventDefault()
+      setDragging(true)
+    },
+    onDragLeave: (event: DragEvent<HTMLDivElement>): void => {
+      if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+      setDragging(false)
+    },
+    onDrop: (event: DragEvent<HTMLDivElement>): void => void importFiles(event)
+  }
+
   return (
-    <div className="panel content-panel">
+    <div className={cn('panel content-panel', dragging && 'dragging')} {...dragHandlers}>
+      {dragging && (
+        <div className="content-drop-overlay">
+          <Upload size={26} />
+          <strong>松开导入到 {meta.folder}</strong>
+          <span>仅支持 {expectedExt} 文件，同名不会覆盖</span>
+        </div>
+      )}
       <div className="panel-head">
         <div>
           <span className="section-kicker">{kind.toUpperCase()}S</span>
@@ -333,7 +389,7 @@ function ContentTab({
           compact
           icon={FileArchive}
           title={`还没有${meta.title}`}
-          description={`把 .${kind === 'mod' ? 'jar' : 'zip'} 文件放入 ${meta.folder} 文件夹，或从资源中心安装。`}
+          description={`把 .${kind === 'mod' || kind === 'datapack' ? 'jar' : 'zip'} 文件拖到这里，或从资源中心安装。`}
           action={
             <button className="btn btn-primary" onClick={() => onBrowse(instance.id, kind)}>
               <Download size={15} /> 浏览资源
@@ -597,6 +653,28 @@ function SettingsTab({
     }
   }
 
+  const changeGameDir = async (): Promise<void> => {
+    try {
+      const picked = await api.dialog.pickDirectory()
+      if (!picked) return
+      await api.instances.setGameDir(instance.id, picked)
+      await onUpdate({})
+      onToast('success', '游戏目录已更改', picked)
+    } catch (error) {
+      onToast('error', '更改游戏目录失败', errorMessage(error))
+    }
+  }
+
+  const resetGameDir = async (): Promise<void> => {
+    try {
+      await api.instances.setGameDir(instance.id, null)
+      await onUpdate({})
+      onToast('success', '已恢复默认游戏目录')
+    } catch (error) {
+      onToast('error', '恢复默认目录失败', errorMessage(error))
+    }
+  }
+
   return (
     <div className="settings-tab">
       <div className="panel">
@@ -619,6 +697,40 @@ function SettingsTab({
             <span>备注</span>
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} placeholder="服务器地址、整合包说明、注意事项…" />
           </label>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <span className="section-kicker">STORAGE</span>
+            <h2>存储位置</h2>
+          </div>
+        </div>
+        <div className="form-grid">
+          <label className="field field-span">
+            <span>游戏目录</span>
+            <div className="input-with-button">
+              <input
+                value={instance.gameDir || '默认位置（数据目录 / instances / 实例 ID / minecraft）'}
+                readOnly
+              />
+              <button className="btn btn-outline" onClick={() => void changeGameDir()}>
+                更改…
+              </button>
+            </div>
+          </label>
+          <div className="field-row">
+            <button className="btn btn-ghost" onClick={() => void resetGameDir()} disabled={!instance.gameDir}>
+              恢复默认位置
+            </button>
+            <button className="btn btn-outline" onClick={() => void api.instances.openFolder(instance.id)}>
+              <FolderOpen size={14} /> 打开目录
+            </button>
+          </div>
+          <p className="storage-note">
+            更改位置会把现有的 minecraft 文件移动到新目录，目标文件夹必须是空文件夹。资源、库文件仍共用数据目录。
+          </p>
         </div>
       </div>
 

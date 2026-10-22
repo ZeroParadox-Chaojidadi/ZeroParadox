@@ -132,16 +132,37 @@ export async function installForge(
   options: ForgeInstallOptions
 ): Promise<{ versionId: string; javaPath: string }> {
   throwIfAborted(options.signal)
-  const fullVersion = `${gameVersion}-${forgeVersion}`
-  const installerName = `forge-${fullVersion}-installer.jar`
-  const installerUrl = `${FORGE_MAVEN}/${fullVersion}/${installerName}`
+  // 1.7.10 这类老版本的构件目录会把 MC 版本重复一遍：
+  // 1.7.10-10.13.4.1614 → 1.7.10-10.13.4.1614-1.7.10，两种拼法都试一遍。
+  const candidates = forgeVersion.startsWith(`${gameVersion}-`)
+    ? [forgeVersion]
+    : [`${gameVersion}-${forgeVersion}`, `${gameVersion}-${forgeVersion}-${gameVersion}`]
+
+  let installerName = ''
+  let installerUrl = ''
+  let sha1: string | undefined
+  for (const candidate of candidates) {
+    throwIfAborted(options.signal)
+    const name = `forge-${candidate}-installer.jar`
+    const url = `${FORGE_MAVEN}/${candidate}/${name}`
+    try {
+      const text = await fetchText(`${url}.sha1`, { signal: options.signal, retries: 0 })
+      installerName = name
+      installerUrl = url
+      sha1 = (text.match(/[a-f0-9]{40}/i) || [])[0]?.toLowerCase()
+      break
+    } catch {
+      // 换下一种拼法继续找。
+    }
+  }
+  if (!installerUrl) {
+    throw new Error(`找不到 Forge ${gameVersion}-${forgeVersion} 的安装器（可能该版本未发布）`)
+  }
+
   const installerPath = path.join(getPaths().cache, 'forge', installerName)
   const expectedVersionId = `${gameVersion}-forge-${forgeVersion}`
 
   progress(options.onProgress, 'Forge', `正在下载 Forge ${forgeVersion} 安装器…`, 2)
-  const sha1 = await fetchText(`${installerUrl}.sha1`, { signal: options.signal, retries: 1 })
-    .then((text) => (text.match(/[a-f0-9]{40}/i) || [])[0]?.toLowerCase())
-    .catch(() => undefined)
 
   await downloadFile(installerUrl, installerPath, {
     sha1,
@@ -219,7 +240,7 @@ export async function installForge(
   return { versionId, javaPath: java.path }
 }
 
-async function readInstallProfile(installerPath: string): Promise<InstallProfile> {
+export async function readInstallProfile(installerPath: string): Promise<InstallProfile> {
   try {
     const zip = new AdmZip(installerPath)
     const entry = zip.getEntry('install_profile.json')
@@ -230,7 +251,7 @@ async function readInstallProfile(installerPath: string): Promise<InstallProfile
   }
 }
 
-async function detectInstalledVersionId(gameVersion: string): Promise<string | null> {
+export async function detectInstalledVersionId(gameVersion: string): Promise<string | null> {
   const versionsDir = getPaths().versions
   let entries: string[] = []
   try {
@@ -256,13 +277,13 @@ async function detectInstalledVersionId(gameVersion: string): Promise<string | n
   return matches[0]?.id || null
 }
 
-async function ensureLauncherProfiles(dataDir: string): Promise<void> {
+export async function ensureLauncherProfiles(dataDir: string): Promise<void> {
   const file = path.join(dataDir, 'launcher_profiles.json')
   if (await pathExists(file)) return
   await writeJsonAtomic(file, { profiles: {}, settings: {}, version: 3 })
 }
 
-async function runInstaller(
+export async function runInstaller(
   javaPath: string,
   installerPath: string,
   dataDir: string,
@@ -295,7 +316,7 @@ async function runInstaller(
     }
     const timer = setTimeout(() => {
       child.kill()
-      finish(new Error('Forge 安装超时，请检查网络后重试'))
+      finish(new Error('安装器超时，请检查网络后重试'))
     }, 20 * 60_000)
 
     signal?.addEventListener('abort', abort, { once: true })

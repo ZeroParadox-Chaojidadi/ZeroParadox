@@ -24,15 +24,21 @@
 ## 当前范围
 
 - 加载器：**Vanilla**、**Fabric**、**Forge**。
-- 账户：离线账户、Microsoft 正版账户。Microsoft 登录需要你自己的 Azure 应用
-  Client ID，且 Minecraft API 可能要求 Mojang 审批该应用。
+- 账户：离线账户、Microsoft 正版账户。微软登录默认使用本项目已通过 Mojang 审批的
+  appID，开箱即用；也支持填自己的 Azure 应用 Client ID。
 - Forge 首次启动会自动下载安装器并完成安装；Forge 实例使用对应游戏版本要求的 Java。
 - 不支持 NeoForge、Quilt 自动安装，也不支持整合包导入。
 - 目前提供 Windows x64 构建。其他平台未测试。
 
 ## 微软正版登录
 
-在账户窗口点击 **Microsoft 正版登录**，按界面提示填写 Azure 应用 Client ID：
+在账户窗口点击 **Microsoft 正版登录**，直接点“开始登录”即可完成设备码登录，
+不需要填任何东西。
+
+启动器内置的 Azure 应用（Client ID 见 `src/shared/azure.ts`）已于 2026-10-21
+通过 Mojang 的 appID 审批，被加入 Minecraft 服务的允许名单。
+
+想改用自己的 Azure 应用时，在登录窗口替换 Client ID：
 
 1. 在 [Azure Portal](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade/quickStartType~/null/isMSAApp~/true)
    创建应用，账户类型选择“个人 Microsoft 账户”。
@@ -40,10 +46,11 @@
 3. 不需要 Client Secret 或重定向 URI。
 4. 把“应用程序(客户端) ID”粘贴到登录窗口。
 
-> 重要的限制：Minecraft 服务会拒绝未经 Mojang 授权的 Azure 应用，并提示
-> `Invalid app registration`。如果出现该错误，需要通过
-> [aka.ms/AppRegInfo](https://aka.ms/AppRegInfo) 提交启动器应用审批。
-> 这是 Microsoft/Mojang 的政策限制，不是启动器可以实现的工作。
+> 审批按 appID 生效：Minecraft 服务会拒绝未经 Mojang 授权的 Azure 应用，并提示
+> `Invalid app registration`。自己的 Client ID 同样需要通过
+> [aka.ms/AppRegInfo](https://aka.ms/AppRegInfo) 提交启动器应用审批，
+> 内置 ID 的审批不会覆盖它。这是 Microsoft/Mojang 的政策限制，
+> 不是启动器可以实现的工作。
 >
 > 授权码、访问令牌和刷新令牌保存在本机的 `launcher.json` 中；启动器不会
 > 向第三方服务器发送这些令牌。

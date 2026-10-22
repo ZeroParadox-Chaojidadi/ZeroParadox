@@ -7,7 +7,13 @@ export function newId(prefix = ''): string {
 }
 
 export async function ensureDir(dir: string): Promise<void> {
-  await fs.mkdir(dir, { recursive: true })
+  try {
+    await fs.mkdir(dir, { recursive: true })
+  } catch (error) {
+    // 磁盘根目录或已存在但无写权限的目录，mkdir 会抛 EPERM；目录本身没问题就放过。
+    const stat = await fs.stat(dir).catch(() => null)
+    if (!stat?.isDirectory()) throw error
+  }
 }
 
 export async function pathExists(target: string): Promise<boolean> {
@@ -117,6 +123,30 @@ export async function copyDir(from: string, to: string, filter?: (src: string) =
       await fs.copyFile(src, dst)
     }
   }
+}
+
+/** 移动目录：同盘直接重命名，跨盘退回复制后删除。目标必须是空目录或不存在。 */
+export async function moveDir(from: string, to: string): Promise<void> {
+  const fromStat = await fs.stat(from).catch(() => null)
+  if (!fromStat?.isDirectory()) {
+    await ensureDir(to)
+    return
+  }
+  const toStat = await fs.stat(to).catch(() => null)
+  if (toStat) {
+    const entries = await fs.readdir(to).catch(() => [])
+    if (entries.length > 0) throw new Error('目标文件夹不是空的，请选择空文件夹')
+    await fs.rmdir(to).catch(() => undefined)
+  }
+  await ensureDir(path.dirname(to))
+  try {
+    await fs.rename(from, to)
+    return
+  } catch {
+    // 跨磁盘无法直接重命名，退回复制再删除。
+  }
+  await fs.cp(from, to, { recursive: true, force: false, errorOnExist: false })
+  await fs.rm(from, { recursive: true, force: true })
 }
 
 export async function dirSize(dir: string): Promise<number> {

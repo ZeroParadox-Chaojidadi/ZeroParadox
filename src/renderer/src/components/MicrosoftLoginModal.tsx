@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Clipboard, ExternalLink, Loader2, LogIn, RotateCcw } from 'lucide-react'
 import type { Account, MicrosoftDeviceCodeInfo } from '../../../shared/types'
+import { BUILT_IN_MICROSOFT_CLIENT_ID } from '../../../shared/azure'
 import { api, errorMessage } from '../lib/utils'
 import Modal from './Modal'
 
@@ -21,11 +22,16 @@ export default function MicrosoftLoginModal({
   onSuccess,
   onToast
 }: MicrosoftLoginModalProps): React.JSX.Element {
-  const [draftClientId, setDraftClientId] = useState(clientId)
+  const [draftClientId, setDraftClientId] = useState(
+    clientId.trim() || BUILT_IN_MICROSOFT_CLIENT_ID
+  )
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [info, setInfo] = useState<MicrosoftDeviceCodeInfo | null>(null)
   const [stage, setStage] = useState<Stage>('setup')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [browserBlocked, setBrowserBlocked] = useState(false)
   const flowRef = useRef<string | null>(null)
   const activeRef = useRef(true)
 
@@ -49,10 +55,19 @@ export default function MicrosoftLoginModal({
   }
 
   const saveClientId = async (): Promise<string> => {
-    const id = draftClientId.trim()
-    if (!id) throw new Error('请填写 Microsoft Azure 应用 Client ID')
+    const id = draftClientId.trim() || BUILT_IN_MICROSOFT_CLIENT_ID
     if (id !== clientId.trim()) await onSaveClientId(id)
     return id
+  }
+
+  const openLoginPage = async (url: string): Promise<void> => {
+    try {
+      await api.shell.openExternal(url)
+      setBrowserBlocked(false)
+    } catch {
+      // 权限受限（例如进程被降权）时系统会拒绝拉起浏览器，这里降级为手动引导。
+      setBrowserBlocked(true)
+    }
   }
 
   const start = async (): Promise<void> => {
@@ -75,7 +90,7 @@ export default function MicrosoftLoginModal({
       flowRef.current = next.flowId
       setInfo(next)
       setStage('waiting')
-      void api.shell.openExternal(next.verificationUri).catch(() => undefined)
+      void openLoginPage(next.verificationUri)
       const account = await api.accounts.microsoftWait(next.flowId)
       flowRef.current = null
       if (!activeRef.current) return
@@ -105,6 +120,17 @@ export default function MicrosoftLoginModal({
       window.setTimeout(() => setCopied(false), 1800)
     } catch {
       onToast('info', '请手动复制设备码', info.userCode)
+    }
+  }
+
+  const copyLink = async (): Promise<void> => {
+    const url = info?.verificationUri || 'https://www.microsoft.com/link'
+    try {
+      await navigator.clipboard.writeText(url)
+      setLinkCopied(true)
+      window.setTimeout(() => setLinkCopied(false), 1800)
+    } catch {
+      onToast('info', '请手动复制链接', url)
     }
   }
 
@@ -142,7 +168,7 @@ export default function MicrosoftLoginModal({
                 </button>
                 <button
                 className="btn btn-primary"
-                disabled={stage === 'starting' || !draftClientId.trim()}
+                disabled={stage === 'starting'}
                 onClick={() => void start()}
               >
                   {stage === 'starting' ? <Loader2 size={15} className="spin" /> : <LogIn size={15} />}
@@ -165,37 +191,57 @@ export default function MicrosoftLoginModal({
               </div>
             </div>
 
-            <label className="field">
-              <span>Azure 应用 Client ID</span>
-              <input
-                value={draftClientId}
-                onChange={(event) => setDraftClientId(event.target.value)}
-                placeholder="例如 00000000-0000-0000-0000-000000000000"
-                spellCheck={false}
-              />
-            </label>
+            {showAdvanced ? (
+              <>
+                <label className="field">
+                  <span>Azure 应用 Client ID</span>
+                  <input
+                    value={draftClientId}
+                    onChange={(event) => setDraftClientId(event.target.value)}
+                    placeholder="例如 00000000-0000-0000-0000-000000000000"
+                    spellCheck={false}
+                  />
+                </label>
 
-            <div className="ms-hint">
-              <p>微软要求每个启动器使用自己的 Azure 应用。注册是免费的，只需要做一次。</p>
-              <button
-                className="text-button"
-                onClick={() =>
-                  void api.shell.openExternal(
-                    'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade/quickStartType~/null/isMSAApp~/true'
-                  )
-                }
-              >
-                打开 Azure 应用注册 <ExternalLink size={12} />
-              </button>
-              <ol>
-                <li>创建应用，账户类型选择“个人 Microsoft 账户”</li>
-                <li>在“身份验证”中添加平台“移动和桌面应用程序”</li>
-                <li>勾选 <code>https://login.microsoftonline.com/common/oauth2/nativeclient</code></li>
-                <li>开启“允许公共客户端流”，保存</li>
-                <li>复制“应用程序(客户端) ID”粘贴到上方</li>
-                <li>如果提示 Invalid app registration，需通过 aka.ms/AppRegInfo 提交启动器应用审批</li>
-              </ol>
-            </div>
+                <div className="ms-hint">
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setDraftClientId(BUILT_IN_MICROSOFT_CLIENT_ID)
+                      setShowAdvanced(false)
+                    }}
+                  >
+                    使用内置 Client ID
+                  </button>
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      void api.shell.openExternal(
+                        'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade/quickStartType~/null/isMSAApp~/true'
+                      )
+                    }
+                  >
+                    打开 Azure 应用注册 <ExternalLink size={12} />
+                  </button>
+                  <p>使用自己的 Azure 应用：</p>
+                  <ol>
+                    <li>创建应用，账户类型选择“个人 Microsoft 账户”</li>
+                    <li>在“身份验证”中添加平台“移动和桌面应用程序”</li>
+                    <li>勾选 <code>https://login.microsoftonline.com/common/oauth2/nativeclient</code></li>
+                    <li>开启“允许公共客户端流”，保存</li>
+                    <li>复制“应用程序(客户端) ID”粘贴到上方</li>
+                    <li>自己的应用同样需要通过 aka.ms/AppRegInfo 提交审批，否则提示 Invalid app registration</li>
+                  </ol>
+                </div>
+              </>
+            ) : (
+              <div className="ms-hint">
+                <p>已内置本项目通过 Mojang 审批的 Client ID，直接点“开始登录”即可。</p>
+                <button className="text-button" onClick={() => setShowAdvanced(true)}>
+                  使用自己的 Azure 应用
+                </button>
+              </div>
+            )}
           </>
         )}
 
@@ -212,19 +258,30 @@ export default function MicrosoftLoginModal({
               <span className="ms-mark">M</span>
               <div>
                 <strong>在浏览器中输入设备码</strong>
-                <p>浏览器已打开微软登录页。完成登录后，此窗口会自动继续。</p>
+                <p>完成登录后，此窗口会自动继续。没有自动打开浏览器时，请手动访问下面的链接。</p>
               </div>
             </div>
             <button className="device-code" onClick={() => void copyCode()} title="点击复制">
               <span>{info.userCode}</span>
               {copied ? <Check size={18} /> : <Clipboard size={18} />}
             </button>
+            <div className="ms-verify">
+              <code>{info.verificationUri}</code>
+              <button className="text-button" onClick={() => void copyLink()}>
+                {linkCopied ? '已复制' : '复制链接'}
+              </button>
+            </div>
+            {browserBlocked ? (
+              <p className="ms-warn">
+                浏览器没能自动打开（可能被系统权限或安全软件拦截），请手动打开上面的链接。
+              </p>
+            ) : null}
             <div className="ms-waiting-row">
               <Loader2 size={15} className="spin" />
               <span>等待 Microsoft 确认…</span>
               <button
                 className="text-button"
-                onClick={() => void api.shell.openExternal(info.verificationUri)}
+                onClick={() => void openLoginPage(info.verificationUri)}
               >
                 重新打开登录页
               </button>

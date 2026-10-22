@@ -7,6 +7,7 @@ import { concurrentMap, downloadFile, mirrorUrl, throwIfAborted } from './http'
 import type { ResolvedVersion } from './mojang'
 import { resolveVersion } from './mojang'
 import { ensureForgeInstalled } from './forge'
+import { ensureNeoForgeInstalled } from './neoforge'
 import { collectClasspath, nativeArtifact, rulesAllow } from './version'
 import { ensureDir, pathExists, writeJsonAtomic } from './util'
 import { store } from './store'
@@ -58,6 +59,23 @@ export async function installInstance(
   throwIfAborted(signal)
 
   instance = await ensureForgeInstalled(instance, {
+    source,
+    signal,
+    onProgress: (update) => {
+      report({
+        kind: 'forge',
+        phase: update.phase,
+        message: update.message,
+        current: 0,
+        total: 1,
+        bytes: update.bytes,
+        bytesTotal: update.bytesTotal,
+        percent: update.percent
+      })
+    }
+  })
+
+  instance = await ensureNeoForgeInstalled(instance, {
     source,
     signal,
     onProgress: (update) => {

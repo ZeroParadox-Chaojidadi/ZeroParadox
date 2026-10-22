@@ -10,16 +10,18 @@ import type {
   AppInfo,
   ContentKind,
   Instance,
+  JavaDetection,
   LaunchResult,
   ProgressEvent,
   Settings,
   VersionManifestResult,
   WindowState
 } from '../shared/types'
-import { initPaths, getPaths, gameDir, instanceDir } from './paths'
+import { initPaths, getPaths, gameDir, instanceDir, readConfiguredResourceDir, writeConfiguredDataDir, writeConfiguredResourceDir } from './paths'
 import { store } from './store'
 import { getVersionManifest, findVersion, installFabricProfile } from './mojang'
 import { getForgeLoaders } from './forge'
+import { getNeoForgeLoaders } from './neoforge'
 import { installInstance } from './installer'
 import {
   launchInstance,
@@ -34,13 +36,24 @@ import {
   deleteContent,
   getProject,
   getProjectVersions,
+  importContentFiles,
   installProject,
   listContent,
   listWorlds,
   searchProjects,
   toggleContent
 } from './modrinth'
-import { newId, offlineUuid, pathExists } from './util'
+import {
+  applyModpackFiles,
+  applyZipToInstance,
+  createInstanceFromMeta,
+  createInstanceFromPack,
+  inspectPack,
+  loadModpack,
+  openPackZip
+} from './modpack'
+import { addExistingInstance, addExistingMany, inspectExistingFolder, scanExistingFolders } from './existing'
+import { moveDir, newId, offlineUuid, pathExists } from './util'
 import { CancelledError } from './http'
 import {
   completeMicrosoftLogin,
@@ -299,15 +312,25 @@ function registerIpc(): void {
     )
   })
 
-  ipcMain.handle('java:detect', async () => {
-    const { findJavaCandidates } = await import('./java')
-    const candidates = await findJavaCandidates(store.getSettings())
-    return candidates.map((candidate) => ({
+  ipcMain.handle('java:detect', async (): Promise<JavaDetection[]> => {
+    const { findJavaCandidates, inspectJava } = await import('./java')
+    const settings = store.getSettings()
+    const candidates = await findJavaCandidates(settings)
+    const result: JavaDetection[] = candidates.map((candidate) => ({
       path: candidate.path,
       major: candidate.major,
       label: candidate.label,
       source: candidate.source
     }))
+    // 手动添加的 Java 追加到列表里（去重，且必须仍然可执行）。
+    for (const custom of settings.extraJavaPaths || []) {
+      const normalized = path.resolve(custom).toLowerCase()
+      if (result.some((item) => path.resolve(item.path).toLowerCase() === normalized)) continue
+      const info = await inspectJava(custom)
+      if (!info) continue
+      result.push({ path: custom, major: info.major, label: info.label, source: 'custom' })
+    }
+    return result
   })
 
   ipcMain.handle('app:info', (): AppInfo => {
@@ -329,6 +352,52 @@ function registerIpc(): void {
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', (): WindowState => ({ maximized: Boolean(mainWindow?.isMaximized()) }))
 
+  ipcMain.handle('settings:setDataDir', async (_event, dir: string, mode: 'move' | 'switch'): Promise<string> => {
+    const target = path.resolve(String(dir || '').trim())
+    if (!target) throw new Error('请选择目录')
+    if (/^[a-zA-Z]:[\\/]?$/.test(target)) {
+      const drive = target.replace(/[\\/]+$/, '')
+      throw new Error(`不能直接使用磁盘根目录，请先在 ${drive} 下新建文件夹（例如 ${drive}\\ZeroParadoxData）再选择`)
+    }
+    const current = getPaths().dataDir
+    if (target === current) throw new Error('这已经是当前数据目录')
+    if (mode === 'move') {
+      await moveDir(current, target)
+    } else {
+      const stat = await fs.stat(target).catch(() => null)
+      if (stat) {
+        const entries = await fs.readdir(target).catch(() => [])
+        if (entries.length > 0) throw new Error('目标目录不是空的，请选择空目录')
+      }
+      await fs.mkdir(target, { recursive: true })
+    }
+    writeConfiguredDataDir(target)
+    return target
+  })
+
+  ipcMain.handle('settings:setResourceDir', async (_event, dir: string | null): Promise<string | null> => {
+    if (dir === null) {
+      writeConfiguredResourceDir(null)
+      return null
+    }
+    const target = path.resolve(String(dir || '').trim())
+    if (!target) throw new Error('请选择目录')
+    const hasAssets = await fs.stat(path.join(target, 'assets')).then((stat) => stat.isDirectory(), () => false)
+    const hasLibraries = await fs.stat(path.join(target, 'libraries')).then((stat) => stat.isDirectory(), () => false)
+    if (!hasAssets && !hasLibraries) {
+      throw new Error('这个目录里没有 assets/ 或 libraries/，请选择其他启动器的 .minecraft 目录')
+    }
+    writeConfiguredResourceDir(target)
+    return target
+  })
+
+  ipcMain.handle('settings:getResourceDir', async () => readConfiguredResourceDir())
+
+  ipcMain.handle('app:relaunch', async (): Promise<void> => {
+    app.relaunch()
+    setTimeout(() => app.exit(0), 200)
+  })
+
   ipcMain.handle('settings:update', async (_event, patch: Partial<Settings>) => {
     const allowed: Partial<Settings> = {}
     const keys: (keyof Settings)[] = [
@@ -345,7 +414,8 @@ function registerIpc(): void {
       'minimizeOnLaunch',
       'checkUpdates',
       'closeAfterGameExit',
-      'microsoftClientId'
+      'microsoftClientId',
+      'extraJavaPaths'
     ]
     for (const key of keys) {
       if (patch[key] !== undefined) (allowed as Record<string, unknown>)[key] = patch[key]
@@ -355,6 +425,12 @@ function registerIpc(): void {
     }
     if (allowed.downloadConcurrency !== undefined) {
       allowed.downloadConcurrency = Math.max(1, Math.min(32, Number(allowed.downloadConcurrency) || 8))
+    }
+    if (allowed.extraJavaPaths !== undefined) {
+      const list = Array.isArray(allowed.extraJavaPaths) ? allowed.extraJavaPaths : []
+      allowed.extraJavaPaths = Array.from(
+        new Set(list.map((item) => String(item).trim()).filter((item) => item.length > 0))
+      ).slice(0, 20)
     }
     if (allowed.checkUpdates === undefined && patch.checkUpdates !== undefined) {
       allowed.checkUpdates = Boolean(patch.checkUpdates)
@@ -373,6 +449,10 @@ function registerIpc(): void {
     return getForgeLoaders(String(gameVersion || '').trim())
   })
 
+  ipcMain.handle('neoforge:versions', async (_event, gameVersion: string) => {
+    return getNeoForgeLoaders(String(gameVersion || '').trim())
+  })
+
   ipcMain.handle(
     'instances:create',
     async (
@@ -380,8 +460,9 @@ function registerIpc(): void {
       input: {
         name: string
         gameVersion: string
-        loaderType: 'vanilla' | 'fabric' | 'forge'
+        loaderType: 'vanilla' | 'fabric' | 'forge' | 'neoforge'
         forgeVersion?: string
+        neoforgeVersion?: string
         icon?: string
         color?: string
         memoryMb?: number | null
@@ -408,6 +489,15 @@ function registerIpc(): void {
         }
         versionId = `${input.gameVersion}-forge-${forgeVersion}`
         loader = { type: 'forge', version: forgeVersion }
+      } else if (input.loaderType === 'neoforge') {
+        const neoVersion = String(input.neoforgeVersion || '').trim()
+        if (!neoVersion) throw new Error('请选择 NeoForge 版本')
+        const available = await getNeoForgeLoaders(input.gameVersion)
+        if (!available.some((item) => item.version === neoVersion)) {
+          throw new Error(`NeoForge ${neoVersion} 不支持 Minecraft ${input.gameVersion}`)
+        }
+        versionId = `${input.gameVersion}-neoforge-${neoVersion}`
+        loader = { type: 'neoforge', version: neoVersion }
       }
       return store.createInstance({
         name,
@@ -438,6 +528,41 @@ function registerIpc(): void {
     return store.updateInstance(id, allowed)
   })
 
+  ipcMain.handle('instances:setGameDir', async (_event, id: string, dir: string | null): Promise<Instance> => {
+    const instance = store.requireInstance(String(id))
+    const from = gameDir(instance.id)
+    const target = dir ? path.resolve(String(dir)) : path.join(instanceDir(instance.id), 'minecraft')
+    if (target === from) return instance
+    await moveDir(from, target)
+    return store.updateInstance(instance.id, { gameDir: dir ? target : null })
+  })
+
+  ipcMain.handle('instances:inspectFolder', async (_event, dir: string) =>
+    inspectExistingFolder(String(dir || ''))
+  )
+
+  ipcMain.handle('instances:scanFolder', async (_event, dir: string) =>
+    scanExistingFolders(String(dir || ''))
+  )
+
+  ipcMain.handle('instances:addExistingMany', async (_event, dirs: string[]) =>
+    addExistingMany(Array.isArray(dirs) ? dirs.map((item) => String(item)) : [])
+  )
+
+  ipcMain.handle(
+    'instances:addExisting',
+    async (
+      _event,
+      dir: string,
+      override?: {
+        name?: string
+        gameVersion?: string
+        loaderType?: 'vanilla' | 'fabric' | 'forge'
+        loaderVersion?: string
+      }
+    ) => addExistingInstance(String(dir || ''), override)
+  )
+
   ipcMain.handle('instances:delete', async (_event, id: string) => {
     if (runningInstanceIds().includes(id)) throw new Error('游戏正在运行，无法删除实例')
     await store.deleteInstance(id)
@@ -457,6 +582,115 @@ function registerIpc(): void {
     await installJob(id)
     return true
   })
+
+  ipcMain.handle('modpacks:inspect', async (_event, packPath: string) => inspectPack(String(packPath || '')))
+
+  ipcMain.handle('modpacks:createFromPack', async (_event, packPath: string): Promise<Instance> => {
+    const source = String(packPath || '').trim()
+    if (!source) throw new Error('请选择整合包文件')
+    const meta = await inspectPack(source)
+    if (!meta.gameVersion) throw new Error('无法识别整合包的游戏版本，请先新建实例再导入')
+    if (meta.kind === 'mrpack') {
+      const { index } = await loadModpack(source)
+      return createInstanceFromPack(source, index)
+    }
+    return createInstanceFromMeta(source, meta)
+  })
+
+  ipcMain.handle('modpacks:applyPack', async (_event, instanceId: string, packPath: string): Promise<void> => {
+    const instance = store.requireInstance(String(instanceId))
+    const source = String(packPath || '').trim()
+    if (!source) throw new Error('请选择整合包文件')
+    const meta = await inspectPack(source)
+    const settings = store.getSettings()
+    const report = (jobId: string) => (update: {
+      phase: string
+      message: string
+      current: number
+      total: number
+      percent: number
+      bytes?: number
+      bytesTotal?: number
+    }): void =>
+      emitProgress(instance.id, jobId, {
+        kind: 'preparing',
+        phase: update.phase,
+        message: update.message,
+        current: update.current,
+        total: update.total,
+        percent: update.percent,
+        bytes: update.bytes,
+        bytesTotal: update.bytesTotal
+      })
+    try {
+      await runJob(instance.id, async (jobId, signal) => {
+        if (meta.kind === 'mrpack') {
+          const { zip, index } = await loadModpack(source)
+          await applyModpackFiles(instance, zip, index, {
+            signal,
+            concurrency: settings.downloadConcurrency,
+            onProgress: report(jobId)
+          })
+        } else {
+          const zip = await openPackZip(source)
+          await applyZipToInstance(instance, zip, { signal, onProgress: report(jobId) })
+        }
+        emitProgress(instance.id, jobId, {
+          kind: 'done',
+          phase: '完成',
+          message: '整合包导入完成',
+          current: 1,
+          total: 1,
+          percent: 100,
+          done: true
+        })
+      })
+    } catch (error) {
+      const message = error instanceof CancelledError ? '导入已取消' : errorMessage(error)
+      emitProgress(instance.id, 'modpack', {
+        kind: 'preparing',
+        phase: '失败',
+        message,
+        current: 0,
+        total: 1,
+        percent: 0,
+        done: true,
+        error: message
+      })
+      throw error
+    }
+  })
+
+  ipcMain.handle('modpacks:applyZip', async (_event, instanceId: string, packPath: string): Promise<void> => {
+    const instance = store.requireInstance(String(instanceId))
+    const source = String(packPath || '').trim()
+    if (!source) throw new Error('请选择整合包文件')
+    const zip = await openPackZip(source)
+    await runJob(instance.id, async (jobId, signal) => {
+      await applyZipToInstance(instance, zip, {
+        signal,
+        onProgress: (update) =>
+          emitProgress(instance.id, jobId, {
+            kind: 'preparing',
+            phase: update.phase,
+            message: update.message,
+            current: update.current,
+            total: update.total,
+            percent: update.percent
+          })
+      })
+      emitProgress(instance.id, jobId, {
+        kind: 'done',
+        phase: '完成',
+        message: '整合包文件已写入',
+        current: 1,
+        total: 1,
+        percent: 100,
+        done: true
+      })
+    })
+  })
+
   ipcMain.handle('instances:launch', async (_event, id: string): Promise<LaunchResult> => {
     const settings = store.getSettings()
     if (settings.minimizeOnLaunch) mainWindow?.minimize()
@@ -613,6 +847,15 @@ function registerIpc(): void {
   ipcMain.handle('content:delete', async (_event, instanceId: string, kind: ContentKind, fileName: string) =>
     deleteContent(instanceId, kind, fileName)
   )
+  ipcMain.handle(
+    'content:import',
+    async (_event, instanceId: string, kind: ContentKind, paths: string[]) => {
+      if (!Array.isArray(paths) || paths.length === 0) {
+        return { imported: [], skipped: [] }
+      }
+      return importContentFiles(instanceId, kind, paths.map((value) => String(value)))
+    }
+  )
   ipcMain.handle('worlds:list', async (_event, instanceId: string) => listWorlds(instanceId))
 
   ipcMain.handle('dialog:pickJava', async (): Promise<string | null> => {
@@ -633,6 +876,17 @@ function registerIpc(): void {
     const info = await inspectJava(selected)
     if (!info) throw new Error('无法识别该文件，请选择 java.exe 或 javaw.exe')
     return selected
+  })
+
+  ipcMain.handle('dialog:pickModpack', async (): Promise<string | null> => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择 Modrinth 整合包',
+      properties: ['openFile'],
+      filters: [{ name: 'Modrinth 整合包', extensions: ['mrpack', 'zip'] }]
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    return result.filePaths[0]
   })
 
   ipcMain.handle('dialog:pickDirectory', async (): Promise<string | null> => {
@@ -659,6 +913,7 @@ function registerIpc(): void {
     await shell.openPath(gameDir(id))
   })
 }
+
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) {

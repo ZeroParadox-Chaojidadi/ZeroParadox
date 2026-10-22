@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { DragEvent } from 'react'
 import {
   Boxes,
   Copy,
   FolderOpen,
   Loader2,
   MoreHorizontal,
+  PackageOpen,
   Play,
   Plus,
   Search,
@@ -25,6 +27,8 @@ interface LibraryViewProps {
   onStop: (id: string) => void
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
+  onImportModpack: (path: string) => void
+  onAddExistingFolder: () => void
 }
 
 export default function LibraryView({
@@ -36,10 +40,13 @@ export default function LibraryView({
   onLaunch,
   onStop,
   onDuplicate,
-  onDelete
+  onDelete,
+  onImportModpack,
+  onAddExistingFolder
 }: LibraryViewProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<'recent' | 'name'>('recent')
+  const [dragging, setDragging] = useState(false)
 
   const sorted = useMemo(() => {
     return instances
@@ -55,16 +62,59 @@ export default function LibraryView({
       })
   }, [instances, query, sort])
 
+  const pickModpack = async (): Promise<void> => {
+    const selected = await api.dialog.pickModpack().catch(() => null)
+    if (selected) onImportModpack(selected)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    setDragging(false)
+    const file = Array.from(event.dataTransfer?.files ?? []).find((item) =>
+      /\.(mrpack|zip)$/i.test(item.name)
+    )
+    if (!file) return
+    const path = api.files.pathForFile(file)
+    if (path) onImportModpack(path)
+  }
+
   return (
-    <div className="view library-view">
+    <div
+      className={cn('view library-view', dragging && 'dropping')}
+      onDragOver={(event) => {
+        if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        setDragging(false)
+      }}
+      onDrop={handleDrop}
+    >
+      {dragging && (
+        <div className="library-drop-overlay">
+          <PackageOpen size={26} />
+          <strong>松开导入 Modrinth 整合包</strong>
+          <span>支持 .mrpack / .zip，导入后会自动创建实例并下载内容</span>
+        </div>
+      )}
       <div className="library-heading">
         <div>
           <h1>游戏实例</h1>
           <p>{instances.length > 0 ? `${instances.length} 个实例` : '还没有创建实例'}</p>
         </div>
-        <button className="btn btn-primary" onClick={onNew}>
-          <Plus size={16} /> 新建实例
-        </button>
+        <div className="library-heading-actions">
+          <button className="btn btn-outline" onClick={onAddExistingFolder}>
+            <FolderOpen size={16} /> 添加实例文件夹
+          </button>
+          <button className="btn btn-outline" onClick={() => void pickModpack()}>
+            <PackageOpen size={16} /> 导入整合包
+          </button>
+          <button className="btn btn-primary" onClick={onNew}>
+            <Plus size={16} /> 新建实例
+          </button>
+        </div>
       </div>
 
       {instances.length > 0 && (

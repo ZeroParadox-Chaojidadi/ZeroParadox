@@ -9,6 +9,7 @@ import {
   Globe2,
   HardDrive,
   Loader2,
+  Plus,
   RefreshCw,
   UserRound,
   Zap
@@ -41,8 +42,61 @@ export default function SettingsView({
 }: SettingsViewProps): React.JSX.Element {
   const [javaList, setJavaList] = useState<JavaDetection[]>([])
   const [detecting, setDetecting] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const [resourceDir, setResourceDir] = useState<string | null>(null)
   const [memoryDraft, setMemoryDraft] = useState(String(settings.memoryMb))
   const [concurrencyDraft, setConcurrencyDraft] = useState(String(settings.downloadConcurrency))
+
+  useEffect(() => {
+    void api.settings
+      .getResourceDir()
+      .then(setResourceDir)
+      .catch(() => undefined)
+  }, [])
+
+  const pickResourceDir = async (): Promise<void> => {
+    const picked = await api.dialog.pickDirectory().catch(() => null)
+    if (!picked) return
+    const confirmed = window.confirm(
+      `将复用该目录下的 assets 与 libraries：\n${picked}\n\n不会复制文件，但启动器可能向该目录补写缺失的资源。设置后需要重启启动器。继续吗？`
+    )
+    if (!confirmed) return
+    try {
+      await api.settings.setResourceDir(picked)
+      onToast('info', '资源目录已设置', '启动器即将重启…')
+      await api.relaunch()
+    } catch (error) {
+      onToast('error', '设置资源目录失败', errorMessage(error))
+    }
+  }
+
+  const resetResourceDir = async (): Promise<void> => {
+    try {
+      await api.settings.setResourceDir(null)
+      onToast('info', '已恢复默认资源目录', '启动器即将重启…')
+      await api.relaunch()
+    } catch (error) {
+      onToast('error', '恢复资源目录失败', errorMessage(error))
+    }
+  }
+
+  const changeDataDir = async (): Promise<void> => {
+    const picked = await api.dialog.pickDirectory().catch(() => null)
+    if (!picked) return
+    const confirmed = window.confirm(
+      `将把启动器数据目录移动到：\n${picked}\n\n实例、资源与库文件会一起迁移，完成后启动器会自动重启。继续吗？`
+    )
+    if (!confirmed) return
+    setMoving(true)
+    try {
+      await api.settings.setDataDir(picked, 'move')
+      onToast('info', '数据目录已更改', '启动器即将重启…')
+      await api.relaunch()
+    } catch (error) {
+      onToast('error', '更改数据目录失败', errorMessage(error))
+      setMoving(false)
+    }
+  }
 
   useEffect(() => {
     setMemoryDraft(String(settings.memoryMb))
@@ -65,6 +119,30 @@ export default function SettingsView({
   useEffect(() => {
     void detectJava()
   }, [])
+
+  const addJava = async (): Promise<void> => {
+    try {
+      const picked = await api.dialog.pickJava()
+      if (!picked) return
+      const next = Array.from(new Set([...(settings.extraJavaPaths || []), picked]))
+      await update({ extraJavaPaths: next })
+      await detectJava()
+      onToast('success', '已添加 Java', picked)
+    } catch (error) {
+      onToast('error', '添加 Java 失败', errorMessage(error))
+    }
+  }
+
+  const removeJava = async (javaPath: string): Promise<void> => {
+    try {
+      const next = (settings.extraJavaPaths || []).filter((item) => item !== javaPath)
+      await update({ extraJavaPaths: next })
+      if (settings.javaPath === javaPath) await update({ javaPath: '' })
+      await detectJava()
+    } catch (error) {
+      onToast('error', '移除 Java 失败', errorMessage(error))
+    }
+  }
 
   const update = async (patch: Partial<Settings>): Promise<void> => {
     try {
@@ -145,6 +223,9 @@ export default function SettingsView({
                 <span>{settings.javaPath ? settings.javaPath : '自动检测本机 Java，缺失时下载 Mojang 运行时'}</span>
               </div>
               <div className="setting-actions">
+                <button className="btn btn-outline small" onClick={() => void addJava()}>
+                  <Plus size={14} /> 添加 Java…
+                </button>
                 <button
                   className="btn btn-outline small"
                   onClick={() => {
@@ -170,18 +251,29 @@ export default function SettingsView({
                 <em>推荐</em>
               </button>
               {javaList.map((java) => (
-                <button
-                  key={java.path}
-                  className={cn('java-option', settings.javaPath === java.path && 'active')}
-                  onClick={() => void update({ javaPath: java.path })}
-                >
-                  <span className="java-radio">{settings.javaPath === java.path && <span />}</span>
-                  <span>
-                    <strong>{java.label}</strong>
-                    <small>{java.path}</small>
-                  </span>
-                  {settings.javaPath === java.path && <Check size={14} />}
-                </button>
+                <div key={java.path} className="java-option-wrap">
+                  <button
+                    className={cn('java-option', settings.javaPath === java.path && 'active')}
+                    onClick={() => void update({ javaPath: java.path })}
+                  >
+                    <span className="java-radio">{settings.javaPath === java.path && <span />}</span>
+                    <span>
+                      <strong>{java.label}</strong>
+                      <small>{java.path}</small>
+                    </span>
+                    {java.source === 'custom' && <em className="java-tag">自定义</em>}
+                    {settings.javaPath === java.path && <Check size={14} />}
+                  </button>
+                  {java.source === 'custom' && (
+                    <button
+                      className="java-option-remove"
+                      title="移除这个 Java"
+                      onClick={() => void removeJava(java.path)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               ))}
               {javaList.length === 0 && !detecting && (
                 <div className="java-empty">未检测到本机 Java。首次启动时会自动下载。</div>
@@ -306,6 +398,23 @@ export default function SettingsView({
             <button className="btn btn-outline full" onClick={() => void api.shell.openPath(dataDir)}>
               <FolderOpen size={15} /> 打开数据目录
             </button>
+            <button
+              className="btn btn-outline full"
+              onClick={() => void changeDataDir()}
+              disabled={moving}
+            >
+              {moving ? <Loader2 size={15} className="spin" /> : <HardDrive size={15} />}
+              {moving ? '正在迁移…' : '更改目录…'}
+            </button>
+            <code className="path-box">{resourceDir || '资源目录：默认（数据目录内）'}</code>
+            <button className="btn btn-outline full" onClick={() => void pickResourceDir()}>
+              <FolderOpen size={15} /> 复用已有资源目录…
+            </button>
+            {resourceDir && (
+              <button className="btn btn-ghost full" onClick={() => void resetResourceDir()}>
+                恢复默认资源目录
+              </button>
+            )}
             <button className="text-button settings-log-link" onClick={() => void api.instances.openLogs()}>
               <ExternalLink size={13} /> 查看所有日志
             </button>

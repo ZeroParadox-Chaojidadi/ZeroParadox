@@ -2,6 +2,7 @@ import { Boxes, Compass, Settings, UserRound } from 'lucide-react'
 import type { Account } from '../../../shared/types'
 import { cn } from '../lib/utils'
 import type { View } from '../types'
+import AccountAvatar from './AccountAvatar'
 
 interface SidebarProps {
   view: View
@@ -49,10 +50,8 @@ export default function Sidebar({
       <div className="sidebar-bottom">
         <button className="account-card" onClick={onAccountClick}>
           <span className="account-avatar">
-            {activeAccount?.avatarUrl ? (
-              <img src={activeAccount.avatarUrl} alt="" />
-            ) : activeAccount ? (
-              activeAccount.username.slice(0, 1).toUpperCase()
+            {activeAccount ? (
+              <AccountAvatar key={activeAccount.id} account={activeAccount} />
             ) : (
               <UserRound size={17} />
             )}

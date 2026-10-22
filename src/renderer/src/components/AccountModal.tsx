@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Check, ChevronRight, Loader2, LogIn, Plus, ShieldCheck, Trash2, UserRound } from 'lucide-react'
 import type { Account } from '../../../shared/types'
 import { cn } from '../lib/utils'
+import AccountAvatar from './AccountAvatar'
 import Modal from './Modal'
 
 interface AccountModalProps {
@@ -75,7 +76,7 @@ export default function AccountModal({
           <div key={account.id} className={cn('account-row', account.id === activeAccountId && 'active')}>
             <button className="account-select" onClick={() => void onSetActive(account.id)}>
               <span className="account-avatar large">
-                {account.avatarUrl ? <img src={account.avatarUrl} alt="" /> : account.username.slice(0, 1).toUpperCase()}
+                <AccountAvatar account={account} />
               </span>
               <span>
                 <strong>{account.username}</strong>

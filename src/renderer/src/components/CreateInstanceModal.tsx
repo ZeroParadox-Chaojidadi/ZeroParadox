@@ -12,9 +12,15 @@ interface CreateInstanceModalProps {
   onCreate: (input: {
     name: string
     gameVersion: string
-    loaderType: 'vanilla' | 'fabric' | 'forge'
+    loaderType: 'vanilla' | 'fabric' | 'forge' | 'neoforge'
     forgeVersion?: string
+    neoforgeVersion?: string
   }) => Promise<void>
+  seed?: {
+    name?: string
+    gameVersion?: string
+    loaderType?: 'vanilla' | 'fabric' | 'forge' | 'neoforge'
+  } | null
 }
 
 export default function CreateInstanceModal({
@@ -22,11 +28,14 @@ export default function CreateInstanceModal({
   latestRelease,
   showSnapshotsDefault,
   onClose,
-  onCreate
+  onCreate,
+  seed
 }: CreateInstanceModalProps): React.JSX.Element {
-  const [name, setName] = useState(`Minecraft ${latestRelease}`)
-  const [gameVersion, setGameVersion] = useState(latestRelease)
-  const [loaderType, setLoaderType] = useState<'vanilla' | 'fabric' | 'forge'>('fabric')
+  const [name, setName] = useState(seed?.name?.trim() || `Minecraft ${latestRelease}`)
+  const [gameVersion, setGameVersion] = useState(seed?.gameVersion || latestRelease)
+  const [loaderType, setLoaderType] = useState<'vanilla' | 'fabric' | 'forge' | 'neoforge'>(
+    seed?.loaderType || 'fabric'
+  )
   const [forgeVersions, setForgeVersions] = useState<ForgeLoader[]>([])
   const [forgeVersion, setForgeVersion] = useState('')
   const [forgeLoading, setForgeLoading] = useState(false)
@@ -50,7 +59,7 @@ export default function CreateInstanceModal({
   }, [gameVersion])
 
   useEffect(() => {
-    if (loaderType !== 'forge') {
+    if (loaderType !== 'forge' && loaderType !== 'neoforge') {
       setForgeVersions([])
       setForgeVersion('')
       setForgeError('')
@@ -60,7 +69,7 @@ export default function CreateInstanceModal({
     let cancelled = false
     setForgeLoading(true)
     setForgeError('')
-    void api.forge
+    void (loaderType === 'neoforge' ? api.neoforge : api.forge)
       .versions(gameVersion)
       .then((list) => {
         if (cancelled) return
@@ -96,8 +105,8 @@ export default function CreateInstanceModal({
       setError('请输入实例名称')
       return
     }
-    if (loaderType === 'forge' && !forgeVersion) {
-      setError(forgeLoading ? '正在获取 Forge 版本…' : '请选择 Forge 版本')
+    if ((loaderType === 'forge' || loaderType === 'neoforge') && !forgeVersion) {
+      setError(forgeLoading ? '正在获取加载器版本…' : '请选择加载器版本')
       return
     }
     setCreating(true)
@@ -106,7 +115,8 @@ export default function CreateInstanceModal({
         name: name.trim(),
         gameVersion,
         loaderType,
-        forgeVersion: loaderType === 'forge' ? forgeVersion : undefined
+        forgeVersion: loaderType === 'forge' ? forgeVersion : undefined,
+        neoforgeVersion: loaderType === 'neoforge' ? forgeVersion : undefined
       })
     } catch (err) {
       setError(errorMessage(err))
@@ -129,13 +139,18 @@ export default function CreateInstanceModal({
               ? '将自动安装最新稳定版 Fabric'
               : loaderType === 'forge'
                 ? '首次启动会下载并安装 Forge，可能需要几分钟'
-                : '原版游戏，可稍后加装 Fabric 或 Forge'}
+                : loaderType === 'neoforge'
+                  ? '首次启动会下载并安装 NeoForge，可能需要几分钟'
+                  : '原版游戏，可稍后加装 Fabric、Forge 或 NeoForge'}
           </span>
           <div className="modal-actions">
             <button className="btn btn-ghost" onClick={onClose} disabled={creating}>
               取消
             </button>
-            <button className="btn btn-primary" onClick={() => void create()} disabled={creating || (loaderType === 'forge' && (forgeLoading || !forgeVersion))}>
+            <button className="btn btn-primary" onClick={() => void create()} disabled={
+              creating ||
+              ((loaderType === 'forge' || loaderType === 'neoforge') && (forgeLoading || !forgeVersion))
+            }>
               {creating ? <Loader2 size={15} className="spin" /> : null}
               {creating ? '创建中…' : '创建'}
             </button>
@@ -248,15 +263,27 @@ export default function CreateInstanceModal({
               </span>
               {loaderType === 'forge' && <Check size={15} />}
             </button>
+            <button
+              type="button"
+              className={cn('loader-option', loaderType === 'neoforge' && 'selected')}
+              onClick={() => setLoaderType('neoforge')}
+            >
+              <span className="loader-icon forge">N</span>
+              <span>
+                <strong>NeoForge</strong>
+                <small>模组加载器</small>
+              </span>
+              {loaderType === 'neoforge' && <Check size={15} />}
+            </button>
           </div>
         </div>
 
-        {loaderType === 'forge' && (
+        {(loaderType === 'forge' || loaderType === 'neoforge') && (
           <div className="field">
-            <span>Forge 版本</span>
+            <span>{loaderType === 'neoforge' ? 'NeoForge 版本' : 'Forge 版本'}</span>
             {forgeLoading ? (
               <div className="forge-loading">
-                <Loader2 size={14} className="spin" /> 正在获取 Forge 版本…
+                <Loader2 size={14} className="spin" /> 正在获取加载器版本…
               </div>
             ) : forgeError ? (
               <div className="form-error">{forgeError}</div>

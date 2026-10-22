@@ -3,6 +3,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import type {
   ContentEntry,
+  ContentImportResult,
   ContentKind,
   InstallSummary,
   Instance,
@@ -415,6 +416,56 @@ export async function deleteContent(instanceId: string, kind: ContentKind, fileN
   const index = await readContentIndex(instanceId)
   delete index[fileName.replace(/\.disabled$/i, '')]
   await writeContentIndex(instanceId, index)
+}
+
+async function uniqueContentTarget(folder: string, fileName: string): Promise<string> {
+  const ext = path.extname(fileName)
+  const base = path.basename(fileName, ext)
+  let candidate = path.join(folder, fileName)
+  let index = 1
+  while (await fs.stat(candidate).then(() => true, () => false)) {
+    candidate = path.join(folder, `${base} (${index})${ext}`)
+    index += 1
+  }
+  return candidate
+}
+
+/**
+ * 导入用户拖进来的文件（.jar 用于模组/数据包，.zip 用于资源包/光影）。
+ * 同名文件不会覆盖，会自动加序号。
+ */
+export async function importContentFiles(
+  instanceId: string,
+  kind: ContentKind,
+  filePaths: string[]
+): Promise<ContentImportResult> {
+  const instance = store.requireInstance(instanceId)
+  const folder = path.join(gameDir(instance.id), KIND_FOLDER[kind])
+  await ensureDir(folder)
+  const expected = kind === 'mod' || kind === 'datapack' ? '.jar' : '.zip'
+  const result: ContentImportResult = { imported: [], skipped: [] }
+
+  for (const raw of filePaths.slice(0, 200)) {
+    const source = path.resolve(String(raw))
+    const original = path.basename(source)
+    if (path.extname(original).toLowerCase() !== expected) {
+      result.skipped.push({ file: original, reason: `只支持 ${expected} 文件` })
+      continue
+    }
+    const stat = await fs.stat(source).catch(() => null)
+    if (!stat?.isFile()) {
+      result.skipped.push({ file: original, reason: '文件不存在或无法读取' })
+      continue
+    }
+    if (path.dirname(source).toLowerCase() === folder.toLowerCase()) {
+      result.skipped.push({ file: original, reason: '文件已经在目标文件夹中' })
+      continue
+    }
+    const destination = await uniqueContentTarget(folder, original)
+    await fs.copyFile(source, destination)
+    result.imported.push(path.basename(destination))
+  }
+  return result
 }
 
 export async function listWorlds(instanceId: string): Promise<WorldEntry[]> {

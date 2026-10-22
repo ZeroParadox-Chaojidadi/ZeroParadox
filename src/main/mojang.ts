@@ -280,10 +280,14 @@ export async function getFabricLoaders(signal?: AbortSignal): Promise<FabricLoad
 
 export async function installFabricProfile(
   gameVersion: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  preferredLoaderVersion?: string
 ): Promise<{ profileId: string; loaderVersion: string; profile: VersionJson }> {
   const loaders = await getFabricLoaders(signal)
-  const loader = loaders.find((item) => item.stable) || loaders[0]
+  const loader =
+    (preferredLoaderVersion && loaders.find((item) => item.version === preferredLoaderVersion)) ||
+    loaders.find((item) => item.stable) ||
+    loaders[0]
   if (!loader) throw new Error('无法获取 Fabric Loader 版本列表')
   const url = `${FABRIC_PROFILE_URL}/${encodeURIComponent(gameVersion)}/${encodeURIComponent(loader.version)}/profile/json`
   const profile = await fetchJson<VersionJson>(url, { signal, retries: 2 })

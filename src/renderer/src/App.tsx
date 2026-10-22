@@ -6,6 +6,7 @@ import type {
   ContentKind,
   Instance,
   LogEvent,
+  PackInspectResult,
   ProgressEvent,
   Settings,
   VersionSummary
@@ -44,6 +45,16 @@ export default function App(): React.JSX.Element {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [createOpen, setCreateOpen] = useState(false)
+  const [createSeed, setCreateSeed] = useState<{
+    name?: string
+    gameVersion?: string
+    loaderType?: 'vanilla' | 'fabric' | 'forge' | 'neoforge'
+  } | null>(null)
+  const [pendingPack, setPendingPack] = useState<{
+    path: string
+    meta: PackInspectResult
+  } | null>(null)
+  const [pendingFolder, setPendingFolder] = useState<string | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [msLoginOpen, setMsLoginOpen] = useState(false)
   const [runningIds, setRunningIds] = useState<string[]>([])
@@ -103,6 +114,19 @@ export default function App(): React.JSX.Element {
       }
     })()
   }, [refresh, loadVersions])
+
+  // 拖入文件时阻止 Electron 默认的“打开文件”导航，交给内容页自己处理。
+  useEffect(() => {
+    const prevent = (event: globalThis.DragEvent): void => {
+      event.preventDefault()
+    }
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => {
+      window.removeEventListener('dragover', prevent)
+      window.removeEventListener('drop', prevent)
+    }
+  }, [])
 
   useEffect(() => {
     const offProgress = api.instances.onProgress((event) => {
@@ -294,6 +318,130 @@ export default function App(): React.JSX.Element {
     [data?.instances, detailId, refresh, pushToast]
   )
 
+  const importModpack = useCallback(
+    async (packPath: string): Promise<void> => {
+      try {
+        pushToast('info', '正在识别整合包…', packPath.split(/[\\/]/).pop() || '')
+        const meta = await api.modpacks.inspect(packPath)
+        if (!meta.gameVersion) {
+          // 识别不出游戏版本时，交给新建实例流程，让用户自己选。
+          setPendingPack({ path: packPath, meta })
+          setCreateSeed({
+            name: meta.name,
+            gameVersion: meta.gameVersion,
+            loaderType: meta.loaderType
+          })
+          setCreateOpen(true)
+          return
+        }
+        const instance = await api.modpacks.createFromPack(packPath)
+        await refresh()
+        setView('library')
+        setDetailId(instance.id)
+        setProgress((current) => ({ ...current, [instance.id]: undefined }))
+        setTask({
+          instanceId: instance.id,
+          instanceName: instance.name,
+          mode: 'install',
+          startedAt: Date.now()
+        })
+        pushToast('info', '正在导入整合包', `${meta.name || instance.name}，文件较多时需要一会儿`)
+        try {
+          await api.modpacks.applyPack(instance.id, packPath)
+        } catch (error) {
+          pushToast('error', '整合包写入失败', errorMessage(error))
+          return
+        }
+        if (meta.kind === 'curseforge' && meta.missingFiles) {
+          pushToast(
+            'info',
+            `有 ${meta.missingFiles} 个模组未下载`,
+            'CurseForge 整合包只导入配置与覆盖文件，模组需要手动补充'
+          )
+        }
+        await refresh()
+        void startInstall(instance.id)
+      } catch (error) {
+        pushToast('error', '导入整合包失败', errorMessage(error))
+      }
+    },
+    [refresh, pushToast, startInstall]
+  )
+
+  const addExistingFolder = useCallback(async (): Promise<void> => {
+    const picked = await api.dialog.pickDirectory().catch(() => null)
+    if (!picked) return
+    try {
+      const candidates = await api.instances.scanFolder(picked)
+      const ready = candidates.filter((item) => item.gameVersion && !item.unsupported)
+      const blocked = candidates.filter((item) => item.unsupported)
+      if (blocked.length > 0) {
+        pushToast(
+          'info',
+          `${blocked.length} 个实例暂不支持`,
+          `${blocked.map((item) => item.name).slice(0, 3).join('、')} 使用 ${blocked[0].unsupported}`
+        )
+      }
+      if (ready.length === 0) {
+        // 版本识别不出来时，走新建实例流程让用户指定；全部是不支持的加载器则直接结束。
+        const single = candidates.find((item) => !item.unsupported)
+        if (!single) return
+        setPendingFolder(single.gameDir || picked)
+        setCreateSeed({
+          name: single.name,
+          gameVersion: single.gameVersion,
+          loaderType: single.loaderType
+        })
+        setCreateOpen(true)
+        return
+      }
+      if (ready.length === 1) {
+        const instance = await api.instances.addExisting(ready[0].gameDir)
+        await refresh()
+        setView('library')
+        setDetailId(instance.id)
+        pushToast('success', '已添加现有实例', instance.name)
+        return
+      }
+      setConfirm({
+        title: `发现 ${ready.length} 个实例`,
+        description: `${ready
+          .slice(0, 6)
+          .map((item) => item.name)
+          .join('、')}${ready.length > 6 ? ` 等 ${ready.length} 个` : ''}，全部加入游戏库？`,
+        confirmLabel: '全部添加',
+        action: async () => {
+          const result = await api.instances.addExistingMany(ready.map((item) => item.gameDir))
+          await refresh()
+          setView('library')
+          pushToast(
+            'success',
+            `已添加 ${result.added.length} 个实例`,
+            result.failed.length > 0 ? `${result.failed.length} 个失败` : undefined
+          )
+        }
+      })
+    } catch (error) {
+      pushToast('error', '添加实例文件夹失败', errorMessage(error))
+    }
+  }, [refresh, pushToast])
+
+  // 任意页面都能接住整合包（内容页有自己的拖放逻辑，交给它处理）。
+  useEffect(() => {
+    const onDrop = (event: globalThis.DragEvent): void => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('.content-panel')) return
+      const file = Array.from(event.dataTransfer?.files ?? []).find((item) =>
+        /\.(mrpack|zip)$/i.test(item.name)
+      )
+      if (!file) return
+      const path = api.files.pathForFile(file)
+      if (path) void importModpack(path)
+    }
+    window.addEventListener('drop', onDrop)
+    return () => window.removeEventListener('drop', onDrop)
+  }, [importModpack])
+
   const duplicateInstance = useCallback(
     async (instanceId: string): Promise<void> => {
       try {
@@ -446,6 +594,8 @@ export default function App(): React.JSX.Element {
               onStop={stop}
               onDuplicate={(id) => void duplicateInstance(id)}
               onDelete={deleteInstance}
+              onImportModpack={(path) => void importModpack(path)}
+              onAddExistingFolder={() => void addExistingFolder()}
             />
           ) : view === 'browse' ? (
             <BrowseView
@@ -476,13 +626,49 @@ export default function App(): React.JSX.Element {
           versions={versions}
           latestRelease={latestRelease || versions[0]?.id || ''}
           showSnapshotsDefault={data.settings.showSnapshots}
-          onClose={() => setCreateOpen(false)}
+          seed={createSeed}
+          onClose={() => {
+            setCreateOpen(false)
+            setCreateSeed(null)
+            setPendingPack(null)
+            setPendingFolder(null)
+          }}
           onCreate={async (input) => {
+            if (pendingFolder) {
+              try {
+                const instance = await api.instances.addExisting(pendingFolder, {
+                  name: input.name,
+                  gameVersion: input.gameVersion,
+                  loaderType: input.loaderType,
+                  loaderVersion: input.forgeVersion
+                })
+                setPendingFolder(null)
+                setCreateSeed(null)
+                setCreateOpen(false)
+                await refresh()
+                setView('library')
+                setDetailId(instance.id)
+                pushToast('success', '已添加现有实例', instance.name)
+              } catch (error) {
+                pushToast('error', '添加实例文件夹失败', errorMessage(error))
+              }
+              return
+            }
             const instance = await api.instances.create({
               ...input,
               icon: '◆',
               color: '#ff4d4f'
             })
+            if (pendingPack) {
+              try {
+                await api.modpacks.applyZip(instance.id, pendingPack.path)
+                pushToast('success', '整合包文件已写入', instance.name)
+              } catch (error) {
+                pushToast('error', '写入整合包文件失败', errorMessage(error))
+              }
+              setPendingPack(null)
+              setCreateSeed(null)
+            }
             setCreateOpen(false)
             await refresh()
             setView('library')

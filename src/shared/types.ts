@@ -1,4 +1,4 @@
-export type LoaderType = 'vanilla' | 'fabric' | 'forge';
+export type LoaderType = 'vanilla' | 'fabric' | 'forge' | 'neoforge';
 
 export interface LoaderInfo {
   type: LoaderType;
@@ -27,6 +27,8 @@ export interface Instance {
   playtimeMs: number;
   memoryMb: number | null;
   javaPath: string | null;
+  /** 自定义游戏目录；为空时使用数据目录下的 instances/<id>/minecraft。 */
+  gameDir?: string | null;
   jvmArgs: string;
   gameArgs: string;
   resolution: Resolution;
@@ -66,6 +68,8 @@ export interface Settings {
   checkUpdates: boolean;
   closeAfterGameExit: boolean;
   microsoftClientId: string;
+  /** 手动添加的 Java 路径（会出现在 Java 列表里）。 */
+  extraJavaPaths: string[];
 }
 
 export interface PublicState {
@@ -85,7 +89,7 @@ export interface JavaDetection {
   path: string;
   major: number;
   label: string;
-  source: 'local' | 'downloaded';
+  source: 'local' | 'downloaded' | 'custom';
 }
 
 export interface MicrosoftDeviceCodeInfo {
@@ -245,6 +249,35 @@ export interface ContentEntry {
   iconUrl?: string | null;
 }
 
+export interface ExistingFolderInfo {
+  kind: 'prism' | 'minecraft' | 'unknown';
+  gameDir: string;
+  name: string;
+  gameVersion?: string;
+  loaderType?: 'vanilla' | 'fabric' | 'forge' | 'neoforge';
+  loaderVersion?: string;
+  /** 当前启动器不支持的加载器。 */
+  unsupported?: string;
+}
+
+export interface ContentImportResult {
+  imported: string[];
+  skipped: Array<{ file: string; reason: string }>;
+}
+
+export type PackKind = 'mrpack' | 'curseforge' | 'prism' | 'generic';
+
+export interface PackInspectResult {
+  kind: PackKind;
+  name?: string;
+  summary?: string;
+  gameVersion?: string;
+  loaderType?: 'vanilla' | 'fabric' | 'forge' | 'neoforge';
+  loaderVersion?: string;
+  /** CurseForge 包需要在线下载的模组数量（本启动器暂不自动下载）。 */
+  missingFiles?: number;
+}
+
 export interface WorldEntry {
   name: string;
   folder: string;
@@ -284,6 +317,10 @@ export interface GameExitEvent {
 export interface LauncherApi {
   getBootstrap: () => Promise<Bootstrap>;
   getAppInfo: () => Promise<AppInfo>;
+  files: {
+    /** 把拖进窗口的 File 换成磁盘路径（File 的系统路径只能在 preload 里读取）。 */
+    pathForFile: (file: unknown) => string;
+  };
   java: {
     detect: () => Promise<JavaDetection[]>;
   };
@@ -296,25 +333,56 @@ export interface LauncherApi {
   };
   settings: {
     update: (patch: Partial<Settings>) => Promise<Settings>;
+    /** 更改启动器数据目录；move 表示把现有数据搬过去。重启后生效。 */
+    setDataDir: (dir: string, mode: 'move' | 'switch') => Promise<string>;
+    /** 复用其他启动器的 assets/libraries 目录（null 表示恢复默认）。重启后生效。 */
+    setResourceDir: (dir: string | null) => Promise<string | null>;
+    getResourceDir: () => Promise<string | null>;
   };
+  /** 重启启动器（数据目录变更后使用）。 */
+  relaunch: () => Promise<void>;
   versions: {
     list: (force?: boolean) => Promise<VersionManifestResult>;
   };
   forge: {
     versions: (gameVersion: string) => Promise<ForgeLoader[]>;
   };
+  neoforge: {
+    versions: (gameVersion: string) => Promise<ForgeLoader[]>;
+  };
   instances: {
     create: (input: {
       name: string;
       gameVersion: string;
-      loaderType: 'vanilla' | 'fabric' | 'forge';
+      loaderType: 'vanilla' | 'fabric' | 'forge' | 'neoforge';
       forgeVersion?: string;
+      neoforgeVersion?: string;
       icon?: string;
       color?: string;
       memoryMb?: number | null;
       notes?: string;
     }) => Promise<Instance>;
     update: (id: string, patch: Partial<Instance>) => Promise<Instance>;
+    /** 更改实例的游戏目录（null 表示恢复默认位置），会移动已有文件。 */
+    setGameDir: (id: string, dir: string | null) => Promise<Instance>;
+    /** 识别一个已有实例/游戏目录。 */
+    inspectFolder: (dir: string) => Promise<ExistingFolderInfo>;
+    /** 扫描目录下的所有实例（versions/ 多版本、实例根目录）。 */
+    scanFolder: (dir: string) => Promise<ExistingFolderInfo[]>;
+    /** 批量添加已有目录，返回成功与失败明细。 */
+    addExistingMany: (
+      dirs: string[]
+    ) => Promise<{ added: Instance[]; failed: Array<{ dir: string; error: string }> }>;
+    /** 把已有目录挂成实例（不复制文件）。 */
+    addExisting: (
+      dir: string,
+      override?: {
+        name?: string;
+        gameVersion?: string;
+        loaderType?: 'vanilla' | 'fabric' | 'forge' | 'neoforge';
+        loaderVersion?: string;
+      }
+    ) => Promise<Instance>;
     delete: (id: string) => Promise<boolean>;
     duplicate: (id: string) => Promise<Instance>;
     openFolder: (id: string) => Promise<void>;
@@ -368,6 +436,7 @@ export interface LauncherApi {
     list: (instanceId: string, kind: ContentKind) => Promise<ContentEntry[]>;
     toggle: (instanceId: string, kind: ContentKind, fileName: string) => Promise<void>;
     delete: (instanceId: string, kind: ContentKind, fileName: string) => Promise<void>;
+    import: (instanceId: string, kind: ContentKind, paths: string[]) => Promise<ContentImportResult>;
   };
   worlds: {
     list: (instanceId: string) => Promise<WorldEntry[]>;
@@ -375,6 +444,17 @@ export interface LauncherApi {
   dialog: {
     pickJava: () => Promise<string | null>;
     pickDirectory: () => Promise<string | null>;
+    pickModpack: () => Promise<string | null>;
+  };
+  modpacks: {
+    /** 识别 zip 整合包的类型与版本信息。 */
+    inspect: (path: string) => Promise<PackInspectResult>;
+    /** 按整合包信息创建实例（不写文件）。 */
+    createFromPack: (path: string) => Promise<Instance>;
+    /** 把整合包内容写入实例，带进度事件。 */
+    applyPack: (instanceId: string, path: string) => Promise<void>;
+    /** 把 zip 整合包的文件铺进已有实例。 */
+    applyZip: (instanceId: string, path: string) => Promise<void>;
   };
   shell: {
     openPath: (target: string) => Promise<string>;

@@ -1,4 +1,6 @@
 import type { AccountRecord } from '../shared/types'
+import { BUILT_IN_MICROSOFT_CLIENT_ID } from '../shared/azure'
+import { minecraftAvatarUrl } from '../shared/avatar'
 import { CancelledError } from './http'
 import { newId } from './util'
 import { store } from './store'
@@ -64,7 +66,8 @@ export class MicrosoftAuthError extends Error {
 }
 
 export function getConfiguredClientId(): string {
-  return store.getSettings().microsoftClientId.trim()
+  const clientId = store.getSettings().microsoftClientId.trim()
+  return clientId || BUILT_IN_MICROSOFT_CLIENT_ID
 }
 
 export async function requestDeviceCode(clientId: string, signal?: AbortSignal): Promise<DeviceCodeResponse> {
@@ -102,6 +105,7 @@ export async function pollForMicrosoftToken(
 ): Promise<MsaTokenResponse> {
   const deadline = Date.now() + Math.max(30, expiresInSeconds) * 1000
   let interval = Math.max(2, intervalSeconds || 5)
+  let networkFailures = 0
   while (Date.now() < deadline) {
     await abortableSleep(interval * 1000, signal)
     try {
@@ -116,6 +120,13 @@ export async function pollForMicrosoftToken(
       )
     } catch (error) {
       if (!(error instanceof MicrosoftAuthError)) throw error
+      if (!error.oauthError) {
+        // 网络抖动（fetch failed）不应中断整个登录：设备码还有效就继续轮询。
+        networkFailures += 1
+        if (networkFailures < 3) continue
+        throw error
+      }
+      networkFailures = 0
       if (error.oauthError === 'authorization_pending') continue
       if (error.oauthError === 'slow_down') {
         interval += 5
@@ -157,7 +168,7 @@ export async function completeMicrosoftLogin(
     type: 'microsoft',
     username: session.profile.name,
     uuid: session.profile.id,
-    avatarUrl: `https://mc-heads.net/avatar/${session.profile.id}/64`,
+    avatarUrl: minecraftAvatarUrl(session.profile.id),
     skinModel: session.profile.skins?.find((skin) => skin.state === 'ACTIVE')?.variant === 'SLIM' ? 'slim' : 'classic',
     accessToken: session.accessToken,
     refreshToken: token.refresh_token,

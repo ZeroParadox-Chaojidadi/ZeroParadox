@@ -2304,6 +2304,38 @@ img {
 
 .content-panel {
   min-height: 380px;
+  position: relative;
+}
+
+.content-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, rgba(12, 8, 9, 0.86));
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text);
+  pointer-events: none;
+}
+
+.content-drop-overlay svg {
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+.content-drop-overlay strong {
+  font-size: 13px;
+}
+
+.content-drop-overlay span {
+  font-size: 10.5px;
+  color: var(--muted);
 }
 
 .content-list {
@@ -3338,6 +3370,44 @@ img {
   border-radius: 7px;
   text-align: left;
   border: 1px solid transparent;
+}
+
+.java-option-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.java-option-wrap .java-option {
+  flex: 1;
+  min-width: 0;
+}
+
+.java-option-remove {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.java-option-remove:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+}
+
+.java-tag {
+  margin-left: auto;
+  font-size: 9px;
+  font-style: normal;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .java-option:hover {
@@ -5771,6 +5841,54 @@ body,
   margin-bottom: 18px;
 }
 
+.library-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.storage-note {
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.library-view {
+  position: relative;
+}
+
+.library-drop-overlay {
+  position: absolute;
+  inset: 12px;
+  z-index: 6;
+  border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 12%, rgba(12, 8, 9, 0.86));
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  pointer-events: none;
+  color: var(--text);
+}
+
+.library-drop-overlay svg {
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+.library-drop-overlay strong {
+  font-size: 14px;
+}
+
+.library-drop-overlay span {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
 .library-heading h1 {
   font-size: 25px;
   font-weight: 650;
@@ -6564,6 +6682,42 @@ body,
 .ms-waiting-row .text-button {
   margin-left: auto;
   font-size: 9.5px;
+}
+
+.ms-verify {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 9px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+.ms-verify code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text);
+  user-select: all;
+}
+
+.ms-verify .text-button {
+  flex: none;
+  margin: 0;
+  font-size: 9.5px;
+}
+
+.ms-warn {
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--warning);
 }
 
 .ms-success,

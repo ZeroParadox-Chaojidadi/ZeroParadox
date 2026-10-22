@@ -14,8 +14,10 @@
  *   ZP_CLI_WAIT       seconds to wait for a launch (default 20)
  */
 import { app } from 'electron'
-import { initPaths, gameDir } from './paths'
+import path from 'path'
+import { initPaths, gameDir, instanceDir } from './paths'
 import { store } from './store'
+import { moveDir } from './util'
 import { getVersionManifest, findVersion, installFabricProfile } from './mojang'
 import { installInstance } from './installer'
 import { launchInstance } from './launcher'
@@ -27,6 +29,17 @@ import {
   requestDeviceCode
 } from './auth'
 import { installForge } from './forge'
+import { getNeoForgeLoaders } from './neoforge'
+import { addExistingInstance, inspectExistingFolder, scanExistingFolders } from './existing'
+import {
+  applyModpackFiles,
+  applyZipToInstance,
+  createInstanceFromMeta,
+  createInstanceFromPack,
+  inspectPack,
+  loadModpack,
+  openPackZip
+} from './modpack'
 import { newId, offlineUuid } from './util'
 
 async function main(): Promise<void> {
@@ -45,6 +58,82 @@ async function main(): Promise<void> {
       onProgress: (update) => console.log(`[forge ${Math.round(update.percent)}%] ${update.message}`)
     })
     console.log(`[forge] version=${result.versionId} java=${result.javaPath}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'modpack-import') {
+    const packPath = process.env.ZP_CLI_PACK?.trim()
+    if (!packPath) throw new Error('Set ZP_CLI_PACK to a .mrpack file')
+    const { zip, index } = await loadModpack(packPath)
+    const instance = await createInstanceFromPack(packPath, index)
+    await applyModpackFiles(instance, zip, index, {
+      concurrency: 4,
+      onProgress: (update) =>
+        console.log(`[modpack ${update.percent}%] ${update.phase}: ${update.message}`)
+    })
+    console.log(`[modpack] instance=${instance.id} name=${instance.name} version=${instance.gameVersion}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'neoforge-list') {
+    const version = process.env.ZP_CLI_VERSION || '1.20.1'
+    const list = await getNeoForgeLoaders(version)
+    console.log(`[neo] ${version}: ${list.slice(0, 5).map((item) => item.version).join(', ')} ... total=${list.length}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'scan-folder') {
+    const dir = process.env.ZP_CLI_DIR?.trim()
+    if (!dir) throw new Error('Set ZP_CLI_DIR')
+    const list = await scanExistingFolders(dir)
+    for (const item of list) {
+      console.log(
+        `[scan] ${item.name} | ${item.gameVersion || '?'} | ${item.unsupported ? 'UNSUPPORTED:' + item.unsupported : (item.loaderType || '?') + ' ' + (item.loaderVersion || '')} | ${item.gameDir}`
+      )
+    }
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'add-folder') {
+    const dir = process.env.ZP_CLI_DIR?.trim()
+    if (!dir) throw new Error('Set ZP_CLI_DIR')
+    const info = await inspectExistingFolder(dir)
+    console.log(`[folder] meta ${JSON.stringify(info)}`)
+    const instance = await addExistingInstance(dir)
+    console.log(`[folder] instance=${instance.id} name=${instance.name} gameDir=${instance.gameDir}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'gamedir') {
+    const instanceId = process.env.ZP_CLI_INSTANCE?.trim()
+    if (!instanceId) throw new Error('Set ZP_CLI_INSTANCE')
+    const instance = store.requireInstance(instanceId)
+    const from = gameDir(instance.id)
+    const target = process.env.ZP_CLI_DIR?.trim()
+    const to = target ? path.resolve(target) : path.join(instanceDir(instance.id), 'minecraft')
+    await moveDir(from, to)
+    const updated = await store.updateInstance(instance.id, { gameDir: target ? to : null })
+    console.log(`[gamedir] ${from} -> ${to} gameDir=${updated.gameDir}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'zip-import') {
+    const packPath = process.env.ZP_CLI_PACK?.trim()
+    if (!packPath) throw new Error('Set ZP_CLI_PACK to a .zip pack')
+    const meta = await inspectPack(packPath)
+    console.log(`[zip] meta ${JSON.stringify(meta)}`)
+    const zip = await openPackZip(packPath)
+    const instance = await createInstanceFromMeta(packPath, meta)
+    await applyZipToInstance(instance, zip, {
+      onProgress: (update) => console.log(`[zip ${update.percent}%] ${update.phase}: ${update.message}`)
+    })
+    console.log(`[zip] instance=${instance.id} name=${instance.name}`)
     setTimeout(() => app.quit(), 300)
     return
   }

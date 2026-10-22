@@ -1,9 +1,11 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron'
 import type {
   Account,
   AppInfo,
   Bootstrap,
   ContentEntry,
+  ContentImportResult,
+  ExistingFolderInfo,
   ContentKind,
   ForgeLoader,
   GameExitEvent,
@@ -17,6 +19,7 @@ import type {
   ModrinthVersion,
   MicrosoftDeviceCodeInfo,
   NewsItem,
+  PackInspectResult,
   ProgressEvent,
   Settings,
   VersionManifestResult,
@@ -33,6 +36,15 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 const api: LauncherApi = {
   getBootstrap: () => ipcRenderer.invoke('app:bootstrap') as Promise<Bootstrap>,
   getAppInfo: () => ipcRenderer.invoke('app:info') as Promise<AppInfo>,
+  files: {
+    pathForFile: (file: unknown) => {
+      try {
+        return webUtils.getPathForFile(file as Parameters<typeof webUtils.getPathForFile>[0])
+      } catch {
+        return ''
+      }
+    }
+  },
   java: {
     detect: () => ipcRenderer.invoke('java:detect') as Promise<import('../shared/types').JavaDetection[]>
   },
@@ -44,8 +56,15 @@ const api: LauncherApi = {
     onState: (callback) => subscribe<WindowState>('window:state', callback)
   },
   settings: {
-    update: (patch: Partial<Settings>) => ipcRenderer.invoke('settings:update', patch) as Promise<Settings>
+    update: (patch: Partial<Settings>) =>
+      ipcRenderer.invoke('settings:update', patch) as Promise<Settings>,
+    setDataDir: (dir: string, mode: 'move' | 'switch') =>
+      ipcRenderer.invoke('settings:setDataDir', dir, mode) as Promise<string>,
+    setResourceDir: (dir: string | null) =>
+      ipcRenderer.invoke('settings:setResourceDir', dir) as Promise<string | null>,
+    getResourceDir: () => ipcRenderer.invoke('settings:getResourceDir') as Promise<string | null>
   },
+  relaunch: () => ipcRenderer.invoke('app:relaunch') as Promise<void>,
   versions: {
     list: (force = false) => ipcRenderer.invoke('versions:list', force) as Promise<VersionManifestResult>
   },
@@ -53,10 +72,27 @@ const api: LauncherApi = {
     versions: (gameVersion: string) =>
       ipcRenderer.invoke('forge:versions', gameVersion) as Promise<ForgeLoader[]>
   },
+  neoforge: {
+    versions: (gameVersion: string) =>
+      ipcRenderer.invoke('neoforge:versions', gameVersion) as Promise<ForgeLoader[]>
+  },
   instances: {
     create: (input) => ipcRenderer.invoke('instances:create', input) as Promise<Instance>,
     update: (id: string, patch: Partial<Instance>) =>
       ipcRenderer.invoke('instances:update', id, patch) as Promise<Instance>,
+    setGameDir: (id: string, dir: string | null) =>
+      ipcRenderer.invoke('instances:setGameDir', id, dir) as Promise<Instance>,
+    inspectFolder: (dir: string) =>
+      ipcRenderer.invoke('instances:inspectFolder', dir) as Promise<ExistingFolderInfo>,
+    scanFolder: (dir: string) =>
+      ipcRenderer.invoke('instances:scanFolder', dir) as Promise<ExistingFolderInfo[]>,
+    addExistingMany: (dirs: string[]) =>
+      ipcRenderer.invoke('instances:addExistingMany', dirs) as Promise<{
+        added: Instance[]
+        failed: Array<{ dir: string; error: string }>
+      }>,
+    addExisting: (dir: string, override) =>
+      ipcRenderer.invoke('instances:addExisting', dir, override) as Promise<Instance>,
     delete: (id: string) => ipcRenderer.invoke('instances:delete', id) as Promise<boolean>,
     duplicate: (id: string) => ipcRenderer.invoke('instances:duplicate', id) as Promise<Instance>,
     openFolder: (id: string) => ipcRenderer.invoke('instances:openFolder', id) as Promise<void>,
@@ -98,14 +134,27 @@ const api: LauncherApi = {
     toggle: (instanceId: string, kind: ContentKind, fileName: string) =>
       ipcRenderer.invoke('content:toggle', instanceId, kind, fileName) as Promise<void>,
     delete: (instanceId: string, kind: ContentKind, fileName: string) =>
-      ipcRenderer.invoke('content:delete', instanceId, kind, fileName) as Promise<void>
+      ipcRenderer.invoke('content:delete', instanceId, kind, fileName) as Promise<void>,
+    import: (instanceId: string, kind: ContentKind, paths: string[]) =>
+      ipcRenderer.invoke('content:import', instanceId, kind, paths) as Promise<ContentImportResult>
   },
   worlds: {
     list: (instanceId: string) => ipcRenderer.invoke('worlds:list', instanceId) as Promise<WorldEntry[]>
   },
   dialog: {
     pickJava: () => ipcRenderer.invoke('dialog:pickJava') as Promise<string | null>,
-    pickDirectory: () => ipcRenderer.invoke('dialog:pickDirectory') as Promise<string | null>
+    pickDirectory: () => ipcRenderer.invoke('dialog:pickDirectory') as Promise<string | null>,
+    pickModpack: () => ipcRenderer.invoke('dialog:pickModpack') as Promise<string | null>
+  },
+  modpacks: {
+    inspect: (path: string) =>
+      ipcRenderer.invoke('modpacks:inspect', path) as Promise<PackInspectResult>,
+    createFromPack: (path: string) =>
+      ipcRenderer.invoke('modpacks:createFromPack', path) as Promise<Instance>,
+    applyPack: (instanceId: string, path: string) =>
+      ipcRenderer.invoke('modpacks:applyPack', instanceId, path) as Promise<void>,
+    applyZip: (instanceId: string, path: string) =>
+      ipcRenderer.invoke('modpacks:applyZip', instanceId, path) as Promise<void>
   },
   shell: {
     openPath: (target: string) => ipcRenderer.invoke('shell:openPath', target) as Promise<string>,
