@@ -29,7 +29,7 @@ import {
   requestDeviceCode
 } from './auth'
 import { installForge } from './forge'
-import { getNeoForgeLoaders } from './neoforge'
+import { getNeoForgeLoaders, installNeoForge } from './neoforge'
 import { addExistingInstance, inspectExistingFolder, scanExistingFolders } from './existing'
 import {
   applyModpackFiles,
@@ -73,6 +73,19 @@ async function main(): Promise<void> {
         console.log(`[modpack ${update.percent}%] ${update.phase}: ${update.message}`)
     })
     console.log(`[modpack] instance=${instance.id} name=${instance.name} version=${instance.gameVersion}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'neoforge-install') {
+    const version = process.env.ZP_CLI_VERSION || '1.20.1'
+    const neo = process.env.ZP_CLI_NEOFORGE_VERSION?.trim()
+    if (!neo) throw new Error('Set ZP_CLI_NEOFORGE_VERSION')
+    const result = await installNeoForge(version, neo, {
+      source: 'official',
+      onProgress: (update) => console.log(`[neo ${Math.round(update.percent)}%] ${update.message}`)
+    })
+    console.log(`[neo] versionId=${result.versionId} java=${result.javaPath}`)
     setTimeout(() => app.quit(), 300)
     return
   }
