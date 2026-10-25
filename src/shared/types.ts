@@ -71,6 +71,8 @@ export interface Settings {
   checkUpdates: boolean;
   closeAfterGameExit: boolean;
   microsoftClientId: string;
+  /** CurseForge API Key，用于按整合包清单补下载模组。 */
+  curseforgeApiKey: string;
   /** 手动添加的 Java 路径（会出现在 Java 列表里）。 */
   extraJavaPaths: string[];
 }
@@ -461,6 +463,10 @@ export interface LauncherApi {
     applyPack: (instanceId: string, path: string) => Promise<void>;
     /** 把 zip 整合包的文件铺进已有实例。 */
     applyZip: (instanceId: string, path: string) => Promise<void>;
+    /** 读取实例里保存的 CurseForge 清单信息。 */
+    curseforgeInfo: (instanceId: string) => Promise<{ name: string; total: number } | null>;
+    /** 按清单补下载模组（需要 CurseForge API Key）。 */
+    downloadCurseforge: (instanceId: string) => Promise<void>;
   };
   shell: {
     openPath: (target: string) => Promise<string>;

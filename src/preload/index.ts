@@ -158,7 +158,14 @@ const api: LauncherApi = {
     applyPack: (instanceId: string, path: string) =>
       ipcRenderer.invoke('modpacks:applyPack', instanceId, path) as Promise<void>,
     applyZip: (instanceId: string, path: string) =>
-      ipcRenderer.invoke('modpacks:applyZip', instanceId, path) as Promise<void>
+      ipcRenderer.invoke('modpacks:applyZip', instanceId, path) as Promise<void>,
+    curseforgeInfo: (instanceId: string) =>
+      ipcRenderer.invoke('modpacks:curseforgeInfo', instanceId) as Promise<{
+        name: string
+        total: number
+      } | null>,
+    downloadCurseforge: (instanceId: string) =>
+      ipcRenderer.invoke('modpacks:downloadCurseforge', instanceId) as Promise<void>
   },
   shell: {
     openPath: (target: string) => ipcRenderer.invoke('shell:openPath', target) as Promise<string>,

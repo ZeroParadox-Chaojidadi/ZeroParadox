@@ -35,6 +35,7 @@ export const defaultSettings: Settings = {
   checkUpdates: true,
   closeAfterGameExit: false,
   microsoftClientId: BUILT_IN_MICROSOFT_CLIENT_ID,
+  curseforgeApiKey: '',
   extraJavaPaths: []
 }
 

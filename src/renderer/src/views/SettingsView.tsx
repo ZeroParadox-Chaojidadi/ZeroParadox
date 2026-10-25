@@ -46,6 +46,7 @@ export default function SettingsView({
   const [resourceDir, setResourceDir] = useState<string | null>(null)
   const [memoryDraft, setMemoryDraft] = useState(String(settings.memoryMb))
   const [concurrencyDraft, setConcurrencyDraft] = useState(String(settings.downloadConcurrency))
+  const [cfKeyDraft, setCfKeyDraft] = useState(settings.curseforgeApiKey || '')
 
   useEffect(() => {
     void api.settings
@@ -101,7 +102,8 @@ export default function SettingsView({
   useEffect(() => {
     setMemoryDraft(String(settings.memoryMb))
     setConcurrencyDraft(String(settings.downloadConcurrency))
-  }, [settings.memoryMb, settings.downloadConcurrency])
+    setCfKeyDraft(settings.curseforgeApiKey || '')
+  }, [settings.memoryMb, settings.downloadConcurrency, settings.curseforgeApiKey])
 
   const detectJava = async (): Promise<void> => {
     setDetecting(true)
@@ -333,6 +335,26 @@ export default function SettingsView({
                 />
                 <button onClick={() => void update({ downloadConcurrency: Math.min(32, settings.downloadConcurrency + 1) })}>+</button>
               </div>
+            </div>
+            <div className="setting-row column">
+              <div className="setting-copy inline">
+                <div>
+                  <strong>CurseForge API Key</strong>
+                  <span>导入 CurseForge 整合包后补下载模组需要，在 console.curseforge.com 免费申请</span>
+                </div>
+              </div>
+              <input
+                className="text-input"
+                value={cfKeyDraft}
+                onChange={(event) => setCfKeyDraft(event.target.value)}
+                onBlur={() => {
+                  if (cfKeyDraft.trim() !== settings.curseforgeApiKey) {
+                    void update({ curseforgeApiKey: cfKeyDraft.trim() })
+                  }
+                }}
+                placeholder="$2a$10$..."
+                spellCheck={false}
+              />
             </div>
           </section>
 

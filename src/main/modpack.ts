@@ -5,7 +5,7 @@ import type { Instance, PackInspectResult } from '../shared/types'
 import { concurrentMap, downloadFile, throwIfAborted } from './http'
 import { getForgeLoaders } from './forge'
 import { getNeoForgeLoaders } from './neoforge'
-import { gameDir } from './paths'
+import { gameDir, instanceDir } from './paths'
 import { installFabricProfile } from './mojang'
 import { store } from './store'
 import { ensureDir, safeName } from './util'
@@ -351,6 +351,18 @@ export async function applyZipToInstance(
   const root = gameDir(instance.id)
   const allEntries = zip.getEntries()
   const packRoot = detectPackRoot(allEntries.map((entry) => entry.entryName.replace(/\\/g, '/')))
+
+  // CurseForge 包只有 manifest（记录 projectID/fileID），把清单留在实例目录，
+  // 之后配置了 API Key 就能按清单补下载模组。
+  const manifestEntry = zip.getEntry(`${packRoot}manifest.json`)
+  if (manifestEntry) {
+    await ensureDir(instanceDir(instance.id))
+    await fs.writeFile(
+      path.join(instanceDir(instance.id), 'curseforge-manifest.json'),
+      manifestEntry.getData()
+    )
+  }
+
 
   // 先算出目标相对路径：剥掉包根目录与 MultiMC/CurseForge 的容器目录。
   const planned: Array<{ entry: AdmZip.IZipEntry; relative: string }> = []

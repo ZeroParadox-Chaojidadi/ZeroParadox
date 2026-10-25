@@ -253,6 +253,7 @@ function ContentTab({
   const [busy, setBusy] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [cfInfo, setCfInfo] = useState<{ name: string; total: number } | null>(null)
   const labels: Record<ContentKind, { title: string; description: string; folder: string }> = {
     mod: { title: '模组', description: '扩展游戏内容，需要 Fabric 加载器支持。', folder: 'mods' },
     resourcepack: { title: '资源包', description: '替换材质、音效与界面风格。', folder: 'resourcepacks' },
@@ -275,6 +276,36 @@ function ContentTab({
   useEffect(() => {
     void load()
   }, [instance.id, kind])
+
+  useEffect(() => {
+    if (kind !== 'mod') {
+      setCfInfo(null)
+      return
+    }
+    let cancelled = false
+    void api.modpacks
+      .curseforgeInfo(instance.id)
+      .then((info) => {
+        if (!cancelled) setCfInfo(info)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [instance.id, kind])
+
+  const downloadCurseforge = async (): Promise<void> => {
+    setBusy('__cf__')
+    try {
+      await api.modpacks.downloadCurseforge(instance.id)
+      await load()
+      onToast('success', '模组已补齐', '按整合包清单下载完成')
+    } catch (error) {
+      onToast('error', '下载模组失败', errorMessage(error))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const toggle = async (entry: ContentEntry): Promise<void> => {
     setBusy(entry.fileName)
@@ -372,6 +403,22 @@ function ContentTab({
           </button>
         </div>
       </div>
+
+      {kind === 'mod' && cfInfo && entries.length === 0 && (
+        <div className="inline-banner warning">
+          <AlertTriangle size={16} />
+          <span>
+            这个整合包有 {cfInfo.total} 个模组需要在 CurseForge 下载，先在设置里填写 API Key 再点右侧按钮。
+          </span>
+          <button
+            className="btn btn-outline small"
+            onClick={() => void downloadCurseforge()}
+            disabled={busy === '__cf__'}
+          >
+            {busy === '__cf__' ? '下载中…' : '下载模组'}
+          </button>
+        </div>
+      )}
 
       {kind === 'mod' && instance.loader.type === 'vanilla' && (
         <div className="inline-banner warning">

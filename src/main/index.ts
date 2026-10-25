@@ -55,6 +55,7 @@ import {
   openPackZip
 } from './modpack'
 import { addExistingInstance, addExistingMany, inspectExistingFolder, scanExistingFolders } from './existing'
+import { downloadCurseforgeMods, getCurseforgeInfo } from './curseforge'
 import { authenticateYggdrasil, fetchYggdrasilHead } from './yggdrasil'
 import { moveDir, newId, offlineUuid, pathExists } from './util'
 import { CancelledError } from './http'
@@ -418,6 +419,7 @@ function registerIpc(): void {
       'checkUpdates',
       'closeAfterGameExit',
       'microsoftClientId',
+      'curseforgeApiKey',
       'extraJavaPaths'
     ]
     for (const key of keys) {
@@ -428,6 +430,9 @@ function registerIpc(): void {
     }
     if (allowed.downloadConcurrency !== undefined) {
       allowed.downloadConcurrency = Math.max(1, Math.min(32, Number(allowed.downloadConcurrency) || 8))
+    }
+    if (allowed.curseforgeApiKey !== undefined) {
+      allowed.curseforgeApiKey = String(allowed.curseforgeApiKey).trim().slice(0, 200)
     }
     if (allowed.extraJavaPaths !== undefined) {
       const list = Array.isArray(allowed.extraJavaPaths) ? allowed.extraJavaPaths : []
@@ -584,6 +589,40 @@ function registerIpc(): void {
   ipcMain.handle('instances:install', async (_event, id: string) => {
     await installJob(id)
     return true
+  })
+
+  ipcMain.handle('modpacks:curseforgeInfo', async (_event, instanceId: string) =>
+    getCurseforgeInfo(String(instanceId || ''))
+  )
+
+  ipcMain.handle('modpacks:downloadCurseforge', async (_event, instanceId: string): Promise<void> => {
+    const instance = store.requireInstance(String(instanceId || ''))
+    const settings = store.getSettings()
+    await runJob(instance.id, async (jobId, signal) => {
+      const result = await downloadCurseforgeMods(instance, settings.curseforgeApiKey, {
+        signal,
+        onProgress: (update) =>
+          emitProgress(instance.id, jobId, {
+            kind: 'preparing',
+            phase: update.phase,
+            message: update.message,
+            current: update.current,
+            total: update.total,
+            percent: update.percent
+          })
+      })
+      emitProgress(instance.id, jobId, {
+        kind: 'done',
+        phase: '完成',
+        message: `已下载 ${result.downloaded} 个，跳过 ${result.skipped} 个${
+          result.failed.length > 0 ? `，失败 ${result.failed.length} 个` : ''
+        }`,
+        current: 1,
+        total: 1,
+        percent: 100,
+        done: true
+      })
+    })
   })
 
   ipcMain.handle('modpacks:inspect', async (_event, packPath: string) => inspectPack(String(packPath || '')))
