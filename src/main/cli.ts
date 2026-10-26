@@ -31,6 +31,7 @@ import {
 import { installForge } from './forge'
 import { getNeoForgeLoaders, installNeoForge } from './neoforge'
 import { ensureAuthlibInjector, fetchYggdrasilHead } from './yggdrasil'
+import { downloadCurseforgeMods } from './curseforge'
 import { addExistingInstance, inspectExistingFolder, scanExistingFolders } from './existing'
 import {
   applyModpackFiles,
@@ -74,6 +75,20 @@ async function main(): Promise<void> {
         console.log(`[modpack ${update.percent}%] ${update.phase}: ${update.message}`)
     })
     console.log(`[modpack] instance=${instance.id} name=${instance.name} version=${instance.gameVersion}`)
+    setTimeout(() => app.quit(), 300)
+    return
+  }
+
+  if (mode === 'cf-download') {
+    const instanceId = process.env.ZP_CLI_INSTANCE?.trim()
+    if (!instanceId) throw new Error('Set ZP_CLI_INSTANCE')
+    const key = process.env.ZP_CF_KEY?.trim() || store.getSettings().curseforgeApiKey
+    const instance = store.requireInstance(instanceId)
+    const result = await downloadCurseforgeMods(instance, key, {
+      onProgress: (update) => console.log(`[cf ${update.percent}%] ${update.message}`)
+    })
+    console.log(`[cf] downloaded=${result.downloaded} skipped=${result.skipped} failed=${result.failed.length}`)
+    for (const item of result.failed.slice(0, 5)) console.log(`[cf] fail: ${item}`)
     setTimeout(() => app.quit(), 300)
     return
   }

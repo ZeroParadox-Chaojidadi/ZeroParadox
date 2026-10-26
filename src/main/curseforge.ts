@@ -61,22 +61,21 @@ async function resolveDownloadUrl(
   apiKey: string,
   signal?: AbortSignal
 ): Promise<{ url: string; fileName: string }> {
-  const response = await fetch(`${API}/mods/${modId}/files`, {
-    method: 'POST',
+  // 用 GET 单文件接口：POST /mods/{id}/files 在部分网络下会被 CloudFront 拦成 403。
+  const response = await fetch(`${API}/mods/${modId}/files/${fileId}`, {
+    method: 'GET',
     headers: {
-      'content-type': 'application/json',
       accept: 'application/json',
       'x-api-key': apiKey
     },
-    body: JSON.stringify({ fileIds: [fileId] }),
     signal
   })
   if (response.status === 403) throw new Error('API Key 无效或没有权限')
   if (!response.ok) throw new Error(`CurseForge API 返回 ${response.status}`)
   const payload = (await response.json()) as {
-    data?: Array<{ downloadUrl?: string | null; fileName?: string }>
+    data?: { downloadUrl?: string | null; fileName?: string }
   }
-  const file = payload.data?.[0]
+  const file = payload.data
   if (!file?.downloadUrl) throw new Error('作者未开放第三方下载（downloadUrl 为空）')
   return {
     url: file.downloadUrl,
