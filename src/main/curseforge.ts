@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { Instance } from '../shared/types'
+import { BUILT_IN_CURSEFORGE_API_KEY } from '../shared/curseforge'
 import { downloadFile, throwIfAborted } from './http'
 import { gameDir, instanceDir } from './paths'
 import { ensureDir, pathExists } from './util'
@@ -90,10 +91,7 @@ export async function downloadCurseforgeMods(
   apiKey: string,
   options: { signal?: AbortSignal; onProgress: (update: CurseforgeProgress) => void }
 ): Promise<CurseforgeResult> {
-  const key = String(apiKey || '').trim()
-  if (!key) {
-    throw new Error('请先在设置里填写 CurseForge API Key（console.curseforge.com 免费申请）')
-  }
+  const key = String(apiKey || '').trim() || BUILT_IN_CURSEFORGE_API_KEY
   const manifest = await readCurseforgeManifest(instance.id)
   const files = (manifest?.files || []).filter((item) => item.projectID && item.fileID)
   if (files.length === 0) throw new Error('这个实例没有 CurseForge 清单，无法自动补模组')

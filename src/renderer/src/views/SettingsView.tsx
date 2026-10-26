@@ -46,7 +46,6 @@ export default function SettingsView({
   const [resourceDir, setResourceDir] = useState<string | null>(null)
   const [memoryDraft, setMemoryDraft] = useState(String(settings.memoryMb))
   const [concurrencyDraft, setConcurrencyDraft] = useState(String(settings.downloadConcurrency))
-  const [cfKeyDraft, setCfKeyDraft] = useState(settings.curseforgeApiKey || '')
 
   useEffect(() => {
     void api.settings
@@ -102,8 +101,7 @@ export default function SettingsView({
   useEffect(() => {
     setMemoryDraft(String(settings.memoryMb))
     setConcurrencyDraft(String(settings.downloadConcurrency))
-    setCfKeyDraft(settings.curseforgeApiKey || '')
-  }, [settings.memoryMb, settings.downloadConcurrency, settings.curseforgeApiKey])
+  }, [settings.memoryMb, settings.downloadConcurrency])
 
   const detectJava = async (): Promise<void> => {
     setDetecting(true)
@@ -176,185 +174,6 @@ export default function SettingsView({
                 <h2>性能</h2>
                 <p>内存与 Java 运行时</p>
               </div>
-            </div>
-            <div className="setting-row column">
-              <div className="setting-copy inline">
-                <div>
-                  <strong>默认内存上限</strong>
-                  <span>新建实例未单独设置时使用，推荐 {recommended} MB</span>
-                </div>
-                <span className="memory-value">{memoryDraft} MB</span>
-              </div>
-              <input
-                type="range"
-                className="range"
-                min={1024}
-                max={maxMemory}
-                step={512}
-                value={Number(memoryDraft)}
-                onChange={(event) => setMemoryDraft(event.target.value)}
-                onPointerUp={(event) => void update({ memoryMb: Number((event.target as HTMLInputElement).value) })}
-                onKeyUp={(event) => void update({ memoryMb: Number((event.target as HTMLInputElement).value) })}
-              />
-              <div className="range-labels">
-                <span>1 GB</span>
-                <span>系统内存 {Math.round(totalMemoryMb / 1024)} GB</span>
-                <span>{Math.round(maxMemory / 1024)} GB</span>
-              </div>
-              <div className="preset-row">
-                {[2048, 4096, 6144, 8192].map((value) => (
-                  <button
-                    key={value}
-                    className={cn('chip-button', Number(memoryDraft) === value && 'active')}
-                    onClick={() => {
-                      setMemoryDraft(String(value))
-                      void update({ memoryMb: value })
-                    }}
-                  >
-                    {value / 1024} GB
-                  </button>
-                ))}
-                <button className="chip-button" onClick={() => setMemoryDraft(String(recommended))}>
-                  推荐
-                </button>
-              </div>
-            </div>
-            <div className="setting-row">
-              <div className="setting-copy">
-                <strong>Java 运行时</strong>
-                <span>{settings.javaPath ? settings.javaPath : '自动检测本机 Java，缺失时下载 Mojang 运行时'}</span>
-              </div>
-              <div className="setting-actions">
-                <button className="btn btn-outline small" onClick={() => void addJava()}>
-                  <Plus size={14} /> 添加 Java…
-                </button>
-                <button
-                  className="btn btn-outline small"
-                  onClick={() => {
-                    void detectJava()
-                  }}
-                  disabled={detecting}
-                >
-                  {detecting ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
-                  重新检测
-                </button>
-              </div>
-            </div>
-            <div className="java-list">
-              <button
-                className={cn('java-option', !settings.javaPath && 'active')}
-                onClick={() => void update({ javaPath: '' })}
-              >
-                <span className="java-radio">{!settings.javaPath && <span />}</span>
-                <span>
-                  <strong>自动选择</strong>
-                  <small>优先使用已安装且版本匹配的 Java</small>
-                </span>
-                <em>推荐</em>
-              </button>
-              {javaList.map((java) => (
-                <div key={java.path} className="java-option-wrap">
-                  <button
-                    className={cn('java-option', settings.javaPath === java.path && 'active')}
-                    onClick={() => void update({ javaPath: java.path })}
-                  >
-                    <span className="java-radio">{settings.javaPath === java.path && <span />}</span>
-                    <span>
-                      <strong>{java.label}</strong>
-                      <small>{java.path}</small>
-                    </span>
-                    {java.source === 'custom' && <em className="java-tag">自定义</em>}
-                    {settings.javaPath === java.path && <Check size={14} />}
-                  </button>
-                  {java.source === 'custom' && (
-                    <button
-                      className="java-option-remove"
-                      title="移除这个 Java"
-                      onClick={() => void removeJava(java.path)}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
-              {javaList.length === 0 && !detecting && (
-                <div className="java-empty">未检测到本机 Java。首次启动时会自动下载。</div>
-              )}
-            </div>
-          </section>
-
-          <section className="panel settings-panel">
-            <div className="settings-section-head">
-              <span className="settings-icon"><Globe2 size={18} /></span>
-              <div>
-                <h2>下载</h2>
-                <p>选择游戏文件与资源的下载方式</p>
-              </div>
-            </div>
-            <div className="setting-row column">
-              <div className="setting-copy">
-                <strong>下载源</strong>
-                <span>官方源更及时；镜像源在中国大陆通常更快</span>
-              </div>
-              <div className="source-options">
-                <button
-                  className={cn('source-card', settings.downloadSource === 'official' && 'active')}
-                  onClick={() => void update({ downloadSource: 'official' })}
-                >
-                  <span className="source-icon official"><Globe2 size={18} /></span>
-                  <span>
-                    <strong>Mojang 官方源</strong>
-                    <small>piston-meta.mojang.com</small>
-                  </span>
-                  <span className="radio-dot" />
-                </button>
-                <button
-                  className={cn('source-card', settings.downloadSource === 'bmclapi' && 'active')}
-                  onClick={() => void update({ downloadSource: 'bmclapi' })}
-                >
-                  <span className="source-icon mirror"><Zap size={18} /></span>
-                  <span>
-                    <strong>BMCLAPI 镜像</strong>
-                    <small>适合中国大陆网络环境</small>
-                  </span>
-                  <span className="radio-dot" />
-                </button>
-              </div>
-            </div>
-            <div className="setting-row">
-              <div className="setting-copy">
-                <strong>并发下载数</strong>
-                <span>同时下载的文件数量，过高可能被服务器限速</span>
-              </div>
-              <div className="number-stepper">
-                <button onClick={() => void update({ downloadConcurrency: Math.max(1, settings.downloadConcurrency - 1) })}>−</button>
-                <input
-                  value={concurrencyDraft}
-                  onChange={(event) => setConcurrencyDraft(event.target.value.replace(/\D/g, ''))}
-                  onBlur={() => void update({ downloadConcurrency: Number(concurrencyDraft) || 8 })}
-                />
-                <button onClick={() => void update({ downloadConcurrency: Math.min(32, settings.downloadConcurrency + 1) })}>+</button>
-              </div>
-            </div>
-            <div className="setting-row column">
-              <div className="setting-copy inline">
-                <div>
-                  <strong>CurseForge API Key</strong>
-                  <span>导入 CurseForge 整合包后补下载模组需要，在 console.curseforge.com 免费申请</span>
-                </div>
-              </div>
-              <input
-                className="text-input"
-                value={cfKeyDraft}
-                onChange={(event) => setCfKeyDraft(event.target.value)}
-                onBlur={() => {
-                  if (cfKeyDraft.trim() !== settings.curseforgeApiKey) {
-                    void update({ curseforgeApiKey: cfKeyDraft.trim() })
-                  }
-                }}
-                placeholder="$2a$10$..."
-                spellCheck={false}
-              />
             </div>
           </section>
 

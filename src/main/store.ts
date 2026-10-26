@@ -8,6 +8,7 @@ import type {
   Settings
 } from '../shared/types'
 import { BUILT_IN_MICROSOFT_CLIENT_ID } from '../shared/azure'
+import { BUILT_IN_CURSEFORGE_API_KEY } from '../shared/curseforge'
 import { resolveAvatarUrl } from '../shared/avatar'
 import { getPaths, gameDir, instanceDir, setCustomGameDirResolver } from './paths'
 import { ensureDir, newId, readJson, safeName, writeJsonAtomic } from './util'
@@ -35,7 +36,7 @@ export const defaultSettings: Settings = {
   checkUpdates: true,
   closeAfterGameExit: false,
   microsoftClientId: BUILT_IN_MICROSOFT_CLIENT_ID,
-  curseforgeApiKey: '',
+  curseforgeApiKey: BUILT_IN_CURSEFORGE_API_KEY,
   extraJavaPaths: []
 }
 
@@ -98,6 +99,9 @@ export class LauncherStore {
     // 旧版本默认值为空字符串，迁移到内置的已审批 appID。
     if (!merged.settings.microsoftClientId.trim()) {
       merged.settings.microsoftClientId = BUILT_IN_MICROSOFT_CLIENT_ID
+    }
+    if (!merged.settings.curseforgeApiKey?.trim()) {
+      merged.settings.curseforgeApiKey = BUILT_IN_CURSEFORGE_API_KEY
     }
     if (Array.isArray(raw.accounts)) merged.accounts = raw.accounts.filter((a) => a && a.id)
     // 早期版本用 mc-heads.net，该域名在部分网络下返回 403，迁移到可用的头像服务。

@@ -408,7 +408,7 @@ function ContentTab({
         <div className="inline-banner warning">
           <AlertTriangle size={16} />
           <span>
-            这个整合包有 {cfInfo.total} 个模组需要在 CurseForge 下载，先在设置里填写 API Key 再点右侧按钮。
+            这个整合包有 {cfInfo.total} 个模组需要在 CurseForge 下载，点右侧按钮自动补齐。
           </span>
           <button
             className="btn btn-outline small"
