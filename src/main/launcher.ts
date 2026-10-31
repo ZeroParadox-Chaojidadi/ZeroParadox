@@ -17,6 +17,56 @@ import { ensureNeoForgeInstalled } from './neoforge'
 import { ensureAuthlibInjector } from './yggdrasil'
 import { CancelledError } from './http'
 
+/**
+ * GTNH 这类 1.7.10 包用 lwjgl3ify 跑在 Java 17+ 上。
+ * 版本 json 里 1.7.10 声明的是 Java 8，直接照做会 ClassNotFoundException: net.minecraft.client.Minecraft，
+ * 所以实例里有 lwjgl3ify 就强制用 Java 17。
+ */
+async function detectJavaOverride(instance: Instance): Promise<{ major: number; component: string } | null> {
+  try {
+    const modsDir = path.join(gameDir(instance.id), 'mods')
+    const entries = await fs.readdir(modsDir)
+    const modernForge = entries.some((name) => /lwjgl3ify|retrofutura|angelica/i.test(name))
+    if (modernForge) return { major: 17, component: 'java-runtime-gamma' }
+  } catch {
+    // mods 目录不存在说明还没导入，忽略
+  }
+  return null
+}
+
+/**
+ * Prism / GTNH 这类包把启动参数放在 gameDir/patches/*.json 里：
+ * lwjgl3ify 的 +jvmArgs（RfbSystemClassLoader、--add-opens）和 mainClass 都在那儿。
+ * 不合并这些，1.7.10 在 Java 17 上会 ClassCastException: AppClassLoader -> URLClassLoader。
+ */
+async function readPrismOverrides(
+  instance: Instance
+): Promise<{ jvmArgs: string[]; mainClass?: string }> {
+  const dir = path.join(gameDir(instance.id), 'patches')
+  const result: { jvmArgs: string[]; mainClass?: string } = { jvmArgs: [] }
+  let files: string[] = []
+  try {
+    files = await fs.readdir(dir)
+  } catch {
+    return result
+  }
+  for (const file of files.sort()) {
+    if (!file.endsWith('.json')) continue
+    try {
+      const data = JSON.parse(await fs.readFile(path.join(dir, file), 'utf8')) as Record<string, unknown>
+      const jvmArgs = data['+jvmArgs']
+      if (Array.isArray(jvmArgs)) {
+        for (const arg of jvmArgs) if (typeof arg === 'string') result.jvmArgs.push(arg)
+      }
+      const mainClass = data.mainClass
+      if (typeof mainClass === 'string' && mainClass) result.mainClass = mainClass
+    } catch {
+      // 单个 patch 解析失败不影响其它
+    }
+  }
+  return result
+}
+
 interface RunningGame {
   process: ChildProcess
   instanceId: string
@@ -166,9 +216,10 @@ export async function launchInstance(
     emit({ kind: 'preparing', phase: '准备启动', message: '游戏文件完整', percent: 20 })
   }
 
+  const javaOverride = await detectJavaOverride(instance)
   const java = await ensureJavaRuntime(
-    resolved.javaMajor,
-    resolved.javaComponent,
+    javaOverride?.major || resolved.javaMajor,
+    javaOverride?.component || resolved.javaComponent,
     settings,
     options.signal,
     (progress) => {
@@ -209,6 +260,14 @@ export async function launchInstance(
     const injector = await ensureAuthlibInjector(options.signal)
     extraJvmArgs = `-javaagent:${injector}=${account.server} ${extraJvmArgs}`.trim()
     userType = 'mojang'
+  }
+
+  const prism = await readPrismOverrides(instance)
+  if (prism.jvmArgs.length > 0) {
+    extraJvmArgs = `${prism.jvmArgs.join(' ')} ${extraJvmArgs}`.trim()
+  }
+  if (prism.mainClass) {
+    resolved.versionJson.mainClass = prism.mainClass
   }
 
   const args = buildLaunchArguments({

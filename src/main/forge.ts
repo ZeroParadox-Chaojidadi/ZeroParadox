@@ -37,7 +37,25 @@ export interface ForgeInstallOptions {
 
 interface InstallProfile {
   version?: string
-  versionInfo?: { id?: string }
+  install?: {
+    filePath?: string
+    path?: string
+    version?: string
+    minecraft?: string
+  }
+  versionInfo?: {
+    id?: string
+    inheritsFrom?: string
+    mainClass?: string
+    minecraftArguments?: string
+    assets?: string
+    type?: string
+    time?: string
+    releaseTime?: string
+    minimumLauncherVersion?: number
+    jar?: string
+    libraries?: Array<{ name?: string; url?: string; checksums?: string[] }>
+  }
 }
 
 interface PromotionsFile {
@@ -205,25 +223,31 @@ export async function installForge(
 
   const dataDir = getPaths().dataDir
   await ensureLauncherProfiles(dataDir)
-  progress(options.onProgress, 'Forge', '正在运行 Forge 安装器，首次安装需要下载依赖…', 35)
 
-  let lineCount = 0
-  let lastProgressAt = 0
-  await runInstaller(java.path, installerPath, dataDir, options.signal, (line) => {
-    lineCount += 1
-    if (/^Patching /i.test(line)) return
-    const now = Date.now()
-    if (now - lastProgressAt < 280) return
-    lastProgressAt = now
-    progress(
-      options.onProgress,
-      'Forge',
-      line.slice(0, 140),
-      Math.min(92, 35 + lineCount * 0.15)
-    )
-  })
-
-  let versionId = profile.version || profile.versionInfo?.id || expectedVersionId
+  const useClientFlag = await installerSupportsInstallClient(java.path, installerPath)
+  let versionId: string
+  if (useClientFlag) {
+    progress(options.onProgress, 'Forge', '正在运行 Forge 安装器，首次安装需要下载依赖…', 35)
+    let lineCount = 0
+    let lastProgressAt = 0
+    await runInstaller(java.path, installerPath, dataDir, options.signal, (line) => {
+      lineCount += 1
+      if (/^Patching /i.test(line)) return
+      const now = Date.now()
+      if (now - lastProgressAt < 280) return
+      lastProgressAt = now
+      progress(
+        options.onProgress,
+        'Forge',
+        line.slice(0, 140),
+        Math.min(92, 35 + lineCount * 0.15)
+      )
+    })
+    versionId = profile.version || profile.versionInfo?.id || expectedVersionId
+  } else {
+    progress(options.onProgress, 'Forge', '老版 Forge 安装器只支持图形界面，改为按清单直接安装…', 40)
+    versionId = await synthesizeLegacyForgeVersion(profile, expectedVersionId)
+  }
   let installedJson = path.join(getPaths().versions, versionId, `${versionId}.json`)
   if (!(await pathExists(installedJson))) {
     const detected = await detectInstalledVersionId(gameVersion)
@@ -283,6 +307,125 @@ export async function ensureLauncherProfiles(dataDir: string): Promise<void> {
   await writeJsonAtomic(file, { profiles: {}, settings: {}, version: 3 })
 }
 
+/**
+ * 1.7.10 那批老安装器（SimpleInstaller）没有 --installClient 选项：
+ * 不传参数就是装客户端，只认 --extract / --installServer / --offline。
+ * 这里跑一次 --help 探明支持的选项，避免给老安装器传它不认识的参数。
+ */
+async function installerSupportsInstallClient(
+  javaPath: string,
+  installerPath: string
+): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    let output = ''
+    let settled = false
+    const done = (value: boolean): void => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
+    try {
+      const child = spawn(javaPath, ['-jar', installerPath, '--help'], {
+        windowsHide: true,
+        env: { ...process.env }
+      })
+      const timer = setTimeout(() => {
+        child.kill()
+        done(true)
+      }, 60_000)
+      const collect = (chunk: Buffer): void => {
+        if (output.length < 20_000) output += chunk.toString('utf8')
+      }
+      child.stdout?.on('data', collect)
+      child.stderr?.on('data', collect)
+      child.on('error', () => {
+        clearTimeout(timer)
+        done(true)
+      })
+      child.on('exit', () => {
+        clearTimeout(timer)
+        done(/installClient/i.test(output))
+      })
+    } catch {
+      done(true)
+    }
+  })
+}
+
+
+/** Forge 官方 maven 走 BMCLAPI 镜像（会 302 到 USTC 镜像，实测可用）。 */
+const FORGE_MAVEN_MIRROR = 'https://bmclapi2.bangbang93.com/maven/'
+
+/** 把 "group:artifact:version[:classifier]" 解析成 maven 相对路径与镜像地址。 */
+function mavenArtifact(name: string | undefined): { path: string; url: string } | null {
+  const parts = String(name || '').split(':')
+  if (parts.length < 3) return null
+  const [group, artifact, version, classifier] = parts
+  if (!group || !artifact || !version) return null
+  const dir = group.replace(/\./g, '/')
+  const file = `${artifact}-${version}${classifier ? `-${classifier}` : ''}.jar`
+  const relative = `${dir}/${artifact}/${version}/${file}`
+  return { path: relative, url: `${FORGE_MAVEN_MIRROR}${relative}` }
+}
+
+/**
+ * 1.7.10 那批老安装器（SimpleInstaller）只有图形界面：不认 --installClient，
+ * 无参数启动会弹 Swing 窗口等人点按钮，没法无头安装。
+ * 这里直接读 jar 内的 install_profile.json，用 versionInfo 生成版本描述，
+ * 依赖统一指向 BMCLAPI 镜像，再交给常规下载流程补齐。
+ */
+async function synthesizeLegacyForgeVersion(
+  profile: InstallProfile,
+  fallbackId: string
+): Promise<string> {
+  const info = profile.versionInfo
+  if (!info?.libraries?.length) {
+    throw new Error('这个 Forge 安装器既没有 --installClient 选项，也没有可用的安装清单')
+  }
+  const universal = profile.install?.filePath || ''
+  const classifier = /-universal\.jar$/i.test(universal) ? 'universal' : undefined
+
+  const libraries = info.libraries.map((library) => {
+    const name = String(library.name || '')
+    const isForge = name.startsWith('net.minecraftforge:forge:')
+    const resolved = mavenArtifact(isForge && classifier ? `${name}:${classifier}` : name)
+    return {
+      name,
+      downloads: {
+        artifact: {
+          path: resolved?.path,
+          url: resolved?.url,
+          sha1: library.checksums?.[0]
+        }
+      }
+    }
+  })
+
+  const versionId = info.id || fallbackId
+  const payload = {
+    id: versionId,
+    inheritsFrom: info.inheritsFrom,
+    mainClass: info.mainClass,
+    minecraftArguments: info.minecraftArguments,
+    assets: info.assets,
+    type: info.type || 'release',
+    time: info.time,
+    releaseTime: info.releaseTime,
+    minimumLauncherVersion: info.minimumLauncherVersion,
+    jar: info.jar,
+    libraries
+  }
+
+  const targetDir = path.join(getPaths().versions, versionId)
+  await fs.mkdir(targetDir, { recursive: true })
+  await fs.writeFile(
+    path.join(targetDir, `${versionId}.json`),
+    JSON.stringify(payload, null, 2),
+    'utf8'
+  )
+  return versionId
+}
+
 export async function runInstaller(
   javaPath: string,
   installerPath: string,
@@ -291,12 +434,17 @@ export async function runInstaller(
   onLine: (line: string) => void
 ): Promise<void> {
   throwIfAborted(signal)
+  // --help 探测要在 Promise executor 之外做，executor 不能是 async。
+  const useClientFlag = await installerSupportsInstallClient(javaPath, installerPath)
+  const installerArgs = useClientFlag
+    ? ['-jar', installerPath, '--installClient', dataDir]
+    : ['-jar', installerPath]
   await new Promise<void>((resolve, reject) => {
     let settled = false
     let lastLines: string[] = []
     let stdoutBuffer = ''
     let stderrBuffer = ''
-    const child = spawn(javaPath, ['-jar', installerPath, '--installClient', dataDir], {
+    const child = spawn(javaPath, installerArgs, {
       cwd: dataDir,
       windowsHide: true,
       env: { ...process.env }

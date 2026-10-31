@@ -58,7 +58,8 @@ function isHtmlResponse(response: Response): boolean {
 async function openResponse(
   url: string,
   signal: AbortSignal | undefined,
-  timeoutMs: number
+  timeoutMs: number,
+  allowHtml = false
 ): Promise<Response> {
   const timeout = AbortSignal.timeout(timeoutMs)
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
@@ -70,7 +71,7 @@ async function openResponse(
   if (!response.ok) {
     throw new DownloadError(`服务器返回 HTTP ${response.status}`, url)
   }
-  if (isHtmlResponse(response)) {
+  if (!allowHtml && isHtmlResponse(response)) {
     throw new DownloadError('下载源返回了网页而不是文件，请切换下载源', url)
   }
   return response
@@ -78,6 +79,8 @@ async function openResponse(
 
 export interface DownloadOptions {
   sha1?: string
+  /** 允许 text/html 响应（Mojang 的 Java 运行时清单里就包含 Welcome.html 这类文件）。 */
+  allowHtml?: boolean
   size?: number
   signal?: AbortSignal
   timeoutMs?: number
@@ -105,7 +108,7 @@ export async function downloadFile(
     throwIfAborted(options.signal)
     const temp = `${destination}.${process.pid}.${Date.now()}.part`
     try {
-      const response = await openResponse(sourceUrl, options.signal, timeoutMs)
+      const response = await openResponse(sourceUrl, options.signal, timeoutMs, options.allowHtml === true)
       const headerLength = Number(response.headers.get('content-length')) || 0
       const total = headerLength || options.size || 0
       let received = 0

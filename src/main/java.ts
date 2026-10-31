@@ -259,6 +259,8 @@ async function downloadJavaRuntime(
     await downloadFile(raw.url, destination, {
       sha1: raw.sha1,
       size: raw.size,
+      // 运行时清单里含 Welcome.html 等非二进制条目，sha1 校验已经能保证完整性。
+      allowHtml: true,
       signal,
       timeoutMs: 10 * 60_000,
       onProgress: (received) => {

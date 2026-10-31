@@ -257,6 +257,12 @@ export function libraryArtifact(library: LibraryJson):
   if (library.downloads?.artifact) {
     return { ...library.downloads.artifact, name: library.name }
   }
+  // 只有 natives/classifiers 的库（如 1.7.10 的 lwjgl-platform:2.9.1）没有主 jar，
+  // 硬拼 maven 路径会 404，这里直接跳过，natives 由对应的分类包单独处理。
+  const nativesOnly =
+    (library.natives && Object.keys(library.natives).length > 0) ||
+    (library.downloads?.classifiers && Object.keys(library.downloads.classifiers).length > 0)
+  if (nativesOnly) return null
   try {
     return {
       path: mavenPath(library.name),

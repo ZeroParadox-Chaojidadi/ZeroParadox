@@ -356,16 +356,35 @@ export async function installInstance(
     const logDir = path.join(paths.assets, 'log_configs')
     const logPath = path.join(logDir, logging.file.id)
     await ensureDir(logDir)
-    await downloadFile(mirrorUrl(logging.file.url, source), logPath, {
-      sha1: logging.file.sha1,
-      size: logging.file.size,
-      signal,
-      timeoutMs: 60_000
-    })
-    if (logging.argument.includes('${path}')) {
-      loggingArgument = logging.argument.replace('${path}', logPath)
-    } else {
-      loggingArgument = `${logging.argument}${logPath}`
+    // 老版本的 log4j 配置（如 1.7.10 的 client-1.7.xml）BMCLAPI 没有镜像，
+    // 而且官方 launchermeta 也已经下架，只有 piston-data 上还在。
+    // 依次尝试：镜像 → 原始地址 → piston-data，全都失败就跳过日志配置，不中断安装。
+    const candidates = [
+      mirrorUrl(logging.file.url, source),
+      logging.file.url,
+      logging.file.url.replace('//launchermeta.mojang.com/', '//piston-data.mojang.com/')
+    ].filter((url, index, list) => url && list.indexOf(url) === index)
+    let downloaded = false
+    for (const candidate of candidates) {
+      try {
+        await downloadFile(candidate, logPath, {
+          sha1: logging.file.sha1,
+          size: logging.file.size,
+          signal,
+          timeoutMs: 60_000
+        })
+        downloaded = true
+        break
+      } catch {
+        // 换下一个源
+      }
+    }
+    if (downloaded) {
+      if (logging.argument.includes('${path}')) {
+        loggingArgument = logging.argument.replace('${path}', logPath)
+      } else {
+        loggingArgument = `${logging.argument}${logPath}`
+      }
     }
   }
 
