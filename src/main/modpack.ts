@@ -207,21 +207,34 @@ export async function applyModpackFiles(
   const overrides = zip
     .getEntries()
     .filter((entry) => !entry.isDirectory && /^(overrides|client-overrides)\//.test(entry.entryName))
-  for (let i = 0; i < overrides.length; i += 1) {
+  let wrote = 0
+  let lastEmit = 0
+  const total = overrides.length
+  const dirsReady = new Set<string>()
+  for (const entry of overrides) {
     throwIfAborted(options.signal)
-    const entry = overrides[i]
     const relative = entry.entryName.replace(/^(overrides|client-overrides)\//, '')
     if (!relative || relative.split('/').includes('..')) continue
     const destination = path.join(root, relative)
-    await ensureDir(path.dirname(destination))
+    const dir = path.dirname(destination)
+    if (!dirsReady.has(dir)) {
+      await ensureDir(dir)
+      dirsReady.add(dir)
+    }
     await fs.writeFile(destination, entry.getData())
-    options.onProgress({
-      phase: '写入配置与覆盖文件',
-      message: path.basename(relative),
-      current: i + 1,
-      total: overrides.length,
-      percent: overrides.length > 0 ? Math.round(((i + 1) / overrides.length) * 100) : 0
-    })
+    wrote += 1
+    const now = Date.now()
+    if (now - lastEmit >= 120 || wrote === total) {
+      lastEmit = now
+      options.onProgress({
+        phase: '写入配置与覆盖文件',
+        message: path.basename(relative),
+        current: wrote,
+        total,
+        percent: total > 0 ? Math.round((wrote / total) * 100) : 0
+      })
+    }
+    if (wrote % 32 === 0) await new Promise<void>((resolve) => setImmediate(resolve))
   }
 }
 
@@ -244,7 +257,10 @@ export async function openPackZip(packPath: string): Promise<AdmZip> {
   const stat = await fs.stat(packPath).catch(() => null)
   if (!stat?.isFile()) throw new Error('整合包文件不存在')
   try {
-    return new AdmZip(packPath)
+    // 用异步读取再交给 AdmZip：AdmZip(path) 会同步读整个文件，
+    // 几百 MB 的整合包（GTNH 这类）会把主进程卡住好几秒。
+    const buffer = await fs.readFile(packPath)
+    return new AdmZip(buffer)
   } catch {
     throw new Error('无法读取整合包，文件可能已损坏')
   }
@@ -377,18 +393,41 @@ export async function applyZipToInstance(
   }
 
   let done = 0
+  let lastEmit = 0
+  const total = planned.length
+  // 目录只需要建一次：GTNH 这类包有上万个小文件，逐个 mkdir 是主要开销之一。
+  const dirsReady = new Set<string>()
+  const ensureParent = async (filePath: string): Promise<void> => {
+    const dir = path.dirname(filePath)
+    if (dirsReady.has(dir)) return
+    await ensureDir(dir)
+    dirsReady.add(dir)
+  }
+  // 大型整合包（GTNH 之类）动辄数万个小文件：逐条 emit 会把 IPC 灌爆，
+  // 同步解压连续调用又会饿死主进程 event loop，界面看起来就是“卡死”。
+  // 这里按时间节流上报，并定期让出事件循环，保证窗口与进度条始终有响应。
+  const emit = (message: string, force = false): void => {
+    const now = Date.now()
+    if (!force && now - lastEmit < 120) return
+    lastEmit = now
+    options.onProgress({
+      phase: '写入整合包文件',
+      message,
+      current: done,
+      total,
+      percent: total > 0 ? Math.round((done / total) * 100) : 0
+    })
+  }
+  emit(`准备写入 ${total} 个文件`, true)
   for (const item of planned) {
     throwIfAborted(options.signal)
     const destination = path.join(root, item.relative)
-    await ensureDir(path.dirname(destination))
+    await ensureParent(destination)
     await fs.writeFile(destination, item.entry.getData())
     done += 1
-    options.onProgress({
-      phase: '写入整合包文件',
-      message: path.basename(item.relative),
-      current: done,
-      total: planned.length,
-      percent: planned.length > 0 ? Math.round((done / planned.length) * 100) : 0
-    })
+    emit(path.basename(item.relative))
+    // 每 32 个文件让出一次事件循环，取消按钮和窗口重绘才有机会执行。
+    if (done % 32 === 0) await new Promise<void>((resolve) => setImmediate(resolve))
   }
+  emit('整合包文件写入完成', true)
 }
